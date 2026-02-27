@@ -40,6 +40,9 @@ describe 'ipmi::user', type: :define do
 
         it { is_expected.not_to contain_exec('ipmi_user_disable_newuser') }
         it { is_expected.not_to contain_exec('ipmi_user_disable_sol_newuser') }
+
+        # purge_id_mismatch defaults false - exec must not be declared
+        it { is_expected.not_to contain_exec('ipmi_user_purge_mismatch_newuser') }
       end
 
       context 'when deploying with all params' do
@@ -67,6 +70,9 @@ describe 'ipmi::user', type: :define do
 
         it { is_expected.to contain_exec('ipmi_user_enable_sol_newuser').with('refreshonly' => 'true') }
         it { is_expected.to contain_exec('ipmi_user_channel_setaccess_newuser').with('refreshonly' => 'true') }
+
+        # purge_id_mismatch defaults false - exec must not be declared
+        it { is_expected.not_to contain_exec('ipmi_user_purge_mismatch_newuser') }
       end
 
       context 'when deploying with all params and a sensitive password' do
@@ -94,6 +100,9 @@ describe 'ipmi::user', type: :define do
 
         it { is_expected.to contain_exec('ipmi_user_enable_sol_newuser').with('refreshonly' => 'true') }
         it { is_expected.to contain_exec('ipmi_user_channel_setaccess_newuser').with('refreshonly' => 'true') }
+
+        # purge_id_mismatch defaults false - exec must not be declared
+        it { is_expected.not_to contain_exec('ipmi_user_purge_mismatch_newuser') }
       end
 
       describe 'when deploying with no params' do
@@ -146,6 +155,74 @@ describe 'ipmi::user', type: :define do
 
         it { is_expected.not_to contain_exec('ipmi_user_enable_newuser') }
         it { is_expected.not_to contain_exec('ipmi_user_enable_sol_newuser') }
+
+        # purge_id_mismatch only applies when enable => true
+        it { is_expected.not_to contain_exec('ipmi_user_purge_mismatch_newuser') }
+      end
+
+      describe 'when disabling a user with purge_id_mismatch => true' do
+        let(:params) do
+          {
+            enable: false,
+            purge_id_mismatch: true,
+          }
+        end
+
+        # purge_id_mismatch is suppressed when enable => false
+        it { is_expected.not_to contain_exec('ipmi_user_purge_mismatch_newuser') }
+
+        it { is_expected.to contain_exec('ipmi_user_disable_newuser').with('refreshonly' => 'true') }
+        it { is_expected.to contain_exec('ipmi_user_disable_sol_newuser').with('refreshonly' => 'true') }
+        it { is_expected.to contain_exec('ipmi_user_channel_setaccess_newuser').with('refreshonly' => 'true') }
+      end
+
+      describe 'when purge_id_mismatch => true with enable => true' do
+        let(:params) do
+          {
+            user: 'newuser1',
+            password: 'password',
+            priv: 3,
+            user_id: 4,
+            purge_id_mismatch: true,
+          }
+        end
+
+        it { is_expected.to contain_exec('ipmi_user_purge_mismatch_newuser') }
+
+        # purge exec must run before the add exec
+        it { is_expected.to contain_exec('ipmi_user_purge_mismatch_newuser').that_comes_before('Exec[ipmi_user_add_newuser]') }
+
+        # normal enable-path resources must still be present
+        it { is_expected.to contain_exec('ipmi_user_enable_newuser').with('refreshonly' => 'true') }
+        it { is_expected.to contain_exec('ipmi_user_add_newuser').that_notifies('Exec[ipmi_user_priv_newuser]') }
+        it { is_expected.to contain_exec('ipmi_user_add_newuser').that_notifies('Exec[ipmi_user_setpw_newuser]') }
+        it { is_expected.to contain_exec('ipmi_user_priv_newuser').that_notifies('Exec[ipmi_user_enable_newuser]') }
+        it { is_expected.to contain_exec('ipmi_user_priv_newuser').that_notifies('Exec[ipmi_user_enable_sol_newuser]') }
+        it { is_expected.to contain_exec('ipmi_user_priv_newuser').that_notifies('Exec[ipmi_user_channel_setaccess_newuser]') }
+        it { is_expected.to contain_exec('ipmi_user_setpw_newuser').that_notifies('Exec[ipmi_user_enable_newuser]') }
+        it { is_expected.to contain_exec('ipmi_user_setpw_newuser').that_notifies('Exec[ipmi_user_enable_sol_newuser]') }
+        it { is_expected.to contain_exec('ipmi_user_setpw_newuser').that_notifies('Exec[ipmi_user_channel_setaccess_newuser]') }
+        it { is_expected.to contain_exec('ipmi_user_enable_sol_newuser').with('refreshonly' => 'true') }
+        it { is_expected.to contain_exec('ipmi_user_channel_setaccess_newuser').with('refreshonly' => 'true') }
+
+        it { is_expected.not_to contain_exec('ipmi_user_disable_newuser') }
+        it { is_expected.not_to contain_exec('ipmi_user_disable_sol_newuser') }
+      end
+
+      describe 'when purge_id_mismatch => true with a sensitive password' do
+        let(:params) do
+          {
+            user: 'newuser1',
+            password: sensitive('password'),
+            priv: 3,
+            user_id: 4,
+            purge_id_mismatch: true,
+          }
+        end
+
+        it { is_expected.to contain_exec('ipmi_user_purge_mismatch_newuser') }
+        it { is_expected.to contain_exec('ipmi_user_purge_mismatch_newuser').that_comes_before('Exec[ipmi_user_add_newuser]') }
+        it { is_expected.to contain_exec('ipmi_user_enable_newuser').with('refreshonly' => 'true') }
       end
     end
   end

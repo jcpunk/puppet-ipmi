@@ -22,6 +22,11 @@
 # @param channel
 #   Controls the channel of the IPMI user to be configured.
 #   Defaults to the first detected lan channel, starting at 1 ending at 11
+# @param purge_id_mismatch
+#   When true, any IPMI user slot that holds $user at an ID other than $user_id
+#   will be blanked and disabled before the desired slot is configured.
+#   IPMI slots cannot be deleted; clearing the name and disabling access is the
+#   BMC-standard equivalent. Defaults to false. Only applies when $enable is true.
 #
 define ipmi::user (
   String $user                                                 = 'root',
@@ -30,12 +35,34 @@ define ipmi::user (
   Integer $user_id                                             = 3,
   Optional[Variant[Sensitive[String[1]], String[1]]] $password = undef,
   Optional[Integer] $channel                                   = undef,
+  Boolean $purge_id_mismatch                                   = false,
 ) {
   require ipmi::install
 
   $_real_channel = $channel ? {
     undef => $ipmi::default_channel,
     default => $channel,
+  }
+
+  # Blank any IPMI user slot holding $user at an ID other than $user_id.
+  # Must run before ipmi_user_add_${title} to avoid duplicate-name conflicts on the BMC.
+  # Not applied when $enable is false: disabling operates on $user_id directly
+  # and a mismatch at another slot is harmless in that case.
+  if $purge_id_mismatch and $enable {
+    file { '/usr/libexec/puppet_ipmi_purge_id_mismatch':
+      ensure => 'file',
+      owner  => 'root',
+      group  => 'root',
+      mode   => '0755',
+      source => 'puppet:///modules/ipmi/puppet_ipmi_purge_id_mismatch',
+    }
+
+    exec { "ipmi_user_purge_mismatch_${title}":
+      command => "/usr/libexec/puppet_ipmi_purge_id_mismatch ${_real_channel} ${user} ${user_id}",
+      onlyif  => "/usr/libexec/puppet_ipmi_purge_id_mismatch --onlyif ${_real_channel} ${user} ${user_id}",
+      before  => Exec["ipmi_user_add_${title}"],
+      require => File['/usr/libexec/puppet_ipmi_purge_id_mismatch'],
+    }
   }
 
   if $enable {
