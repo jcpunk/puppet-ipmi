@@ -11,6 +11,7 @@ group :test do
   gem 'puppet-lint-strict_indent-check',        :require => false
   gem 'puppet-lint-unquoted_string-check',      :require => false
   gem 'puppet-lint-variable_contains_upcase',   :require => false
+  gem 'mocha', '~> 3.0',                        :require => false
 end
 
 group :development do
