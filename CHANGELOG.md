@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 Each new release typically also includes the latest modulesync defaults.
 These should not affect the functionality of the module.
 
+## [v7.0.0](https://github.com/jhoblitt/puppet-ipmi/tree/v7.0.0) (2026-03-11)
+
+[Full Changelog](https://github.com/jhoblitt/puppet-ipmi/compare/v6.1.0...v7.0.0)
+
+**Breaking changes:**
+
+- drop support for puppet7 [\#95](https://github.com/jhoblitt/puppet-ipmi/pull/95) ([jhoblitt](https://github.com/jhoblitt))
+
+**Implemented enhancements:**
+
+- allow puppetlabs/augeas\_core 2.x [\#96](https://github.com/jhoblitt/puppet-ipmi/pull/96) ([jhoblitt](https://github.com/jhoblitt))
+- Fact ipmitool fru [\#75](https://github.com/jhoblitt/puppet-ipmi/pull/75) ([b4ldr](https://github.com/b4ldr))
+
+**Merged pull requests:**
+
+- Modulesync 10.5.0 [\#93](https://github.com/jhoblitt/puppet-ipmi/pull/93) ([jcpunk](https://github.com/jcpunk))
+
 ## [v6.1.0](https://github.com/jhoblitt/puppet-ipmi/tree/v6.1.0) (2024-09-24)
 
 [Full Changelog](https://github.com/jhoblitt/puppet-ipmi/compare/v6.0.0...v6.1.0)
