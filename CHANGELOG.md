@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 Each new release typically also includes the latest modulesync defaults.
 These should not affect the functionality of the module.
 
+## [v8.0.0](https://github.com/jhoblitt/puppet-ipmi/tree/v8.0.0) (2026-03-12)
+
+[Full Changelog](https://github.com/jhoblitt/puppet-ipmi/compare/v7.0.0...v8.0.0)
+
+**Breaking changes:**
+
+- rm ipmitool\_mc\_info fact; replaced by ipmitool.mc\_info [\#99](https://github.com/jhoblitt/puppet-ipmi/pull/99) ([jhoblitt](https://github.com/jhoblitt))
+
+**Fixed bugs:**
+
+- fix default value for ipmi::service\_ensure [\#98](https://github.com/jhoblitt/puppet-ipmi/pull/98) ([jhoblitt](https://github.com/jhoblitt))
+
 ## [v7.0.0](https://github.com/jhoblitt/puppet-ipmi/tree/v7.0.0) (2026-03-11)
 
 [Full Changelog](https://github.com/jhoblitt/puppet-ipmi/compare/v6.1.0...v7.0.0)
