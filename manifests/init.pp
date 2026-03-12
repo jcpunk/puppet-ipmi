@@ -28,8 +28,8 @@ class ipmi (
   Array[String] $packages,
   Stdlib::Absolutepath $config_file,
   String $service_name,
-  Stdlib::Ensure::Service $service_ensure,
   String $ipmievd_service_name,
+  Variant[Stdlib::Ensure::Service, String[0]] $service_ensure,
   Stdlib::Ensure::Service $ipmievd_service_ensure,
   Boolean $watchdog,
   Optional[Hash] $snmps,
@@ -37,7 +37,12 @@ class ipmi (
   Optional[Hash] $networks,
   Integer[0] $default_channel = Integer(fact('ipmi.default.channel') or 1),
 ) {
-  $enable_ipmi = $service_ensure ? {
+  $real_service_ensure = $service_ensure ? {
+    'running' => 'running',
+    default   => 'stopped',
+  }
+
+  $enable_ipmi = $real_service_ensure ? {
     'running' => true,
     'stopped' => false,
   }
@@ -51,7 +56,7 @@ class ipmi (
   contain ipmi::config
 
   class { 'ipmi::service::ipmi':
-    ensure            => $service_ensure,
+    ensure            => $real_service_ensure,
     enable            => $enable_ipmi,
     ipmi_service_name => $service_name,
   }

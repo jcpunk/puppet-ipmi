@@ -8,7 +8,7 @@ describe 'ipmi::user', type: :define do
       let(:facts) do
         facts.merge(
           {
-            ipmitool_mc_info: { IPMI_Puppet_Service_Recommend: 'running' },
+            ipmitool: { mc_info: { IPMI_Puppet_Service_Recommend: 'running' } },
             ipmi: { default: { channel: 1 } }
           }
         )

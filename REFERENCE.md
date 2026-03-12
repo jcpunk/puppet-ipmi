@@ -65,7 +65,7 @@ Name of IPMI service.
 
 ##### <a name="-ipmi--service_ensure"></a>`service_ensure`
 
-Data type: `Stdlib::Ensure::Service`
+Data type: `Variant[Stdlib::Ensure::Service, String[0]]`
 
 Controls the state of the `ipmi` service. Possible values: `running`, `stopped`
 
