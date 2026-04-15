@@ -77,6 +77,17 @@ Create a user with user privileges on a specific channel:
   }
 ```
 
+Create a user and remove any instance with the wrong `user_id`:
+```puppet
+  ipmi::user { 'newuser1':
+    user     => 'newuser1',
+    password => 'password1',
+    user_id  => 4,
+    purge_id_mismatch => true,
+  }
+```
+
+
 Configure a static ip on IPMI lan channel 1:
 
 ```puppet

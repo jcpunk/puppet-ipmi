@@ -212,6 +212,7 @@ The following parameters are available in the `ipmi::user` defined type:
 * [`user_id`](#-ipmi--user--user_id)
 * [`password`](#-ipmi--user--password)
 * [`channel`](#-ipmi--user--channel)
+* [`purge_id_mismatch`](#-ipmi--user--purge_id_mismatch)
 
 ##### <a name="-ipmi--user--user"></a>`user`
 
@@ -269,4 +270,15 @@ Controls the channel of the IPMI user to be configured.
 Defaults to the first detected lan channel, starting at 1 ending at 11
 
 Default value: `undef`
+
+##### <a name="-ipmi--user--purge_id_mismatch"></a>`purge_id_mismatch`
+
+Data type: `Boolean`
+
+When true, any IPMI user slot that holds $user at an ID other than $user_id
+will be blanked and disabled before the desired slot is configured.
+IPMI slots cannot be deleted; clearing the name and disabling access is the
+BMC-standard equivalent. Defaults to false. Only applies when $enable is true.
+
+Default value: `false`
 
