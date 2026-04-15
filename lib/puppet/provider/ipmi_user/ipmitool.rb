@@ -128,14 +128,14 @@ Puppet::Type.type(:ipmi_user).provide(
 
   def enable_user!
     # Set username
-    ipmitool_exec("user set name #{user_id} #{user_name}", failonfail: true)
+    ipmitool_exec("user set name #{user_id} #{shellescape(user_name)}", failonfail: true)
 
     # Set password
     pw = real_password
     if pw && !pw.empty?
       password_capacity = pw.length <= 16 ? '16' : '20'
       ipmitool_exec(
-        "user set password #{user_id} \"#{pw}\" #{password_capacity}",
+        "user set password #{user_id} #{shellescape(pw)} #{password_capacity}",
         failonfail: true
       )
     end

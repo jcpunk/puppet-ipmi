@@ -56,7 +56,7 @@ Puppet::Type.type(:ipmi_user).provide(
 
   def bmc_config_set(section, key, value)
     bmcconfig_exec(
-      "--commit --key-pair \"#{section}:#{key}=#{value}\"",
+      "--commit --key-pair #{shellescape("#{section}:#{key}=#{value}")}",
       failonfail: true
     )
   end

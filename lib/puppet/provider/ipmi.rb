@@ -2,6 +2,7 @@
 
 require 'puppet'
 require 'puppet/provider'
+require 'shellwords'
 
 # Base provider for IPMI-managed resources.
 #
@@ -33,6 +34,11 @@ class Puppet::Provider::Ipmi < Puppet::Provider
   # Path to the bmc-config binary.
   def bmcconfig_cmd
     @resource[:bmcconfig_cmd] || '/usr/sbin/bmc-config'
+  end
+
+  # Shell-escape a value for safe interpolation into command strings.
+  def shellescape(val)
+    Shellwords.escape(val.to_s)
   end
 
   # ---------------------------------------------------------------------------
