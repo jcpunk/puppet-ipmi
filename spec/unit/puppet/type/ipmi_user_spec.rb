@@ -5,13 +5,13 @@ require 'puppet/type/ipmi_user'
 
 describe Puppet::Type.type(:ipmi_user) do
   describe 'when validating attributes' do
-    [:name, :user, :user_id, :password, :channel, :ipmitool_cmd, :bmcconfig_cmd, :purge_id_mismatch].each do |param|
+    %i[name user user_id password channel ipmitool_cmd bmcconfig_cmd purge_id_mismatch].each do |param|
       it "has a #{param} parameter" do
         expect(described_class.attrtype(param)).to eq(:param)
       end
     end
 
-    [:enable, :priv].each do |prop|
+    %i[enable priv].each do |prop|
       it "has a #{prop} property" do
         expect(described_class.attrtype(prop)).to eq(:property)
       end
@@ -46,15 +46,15 @@ describe Puppet::Type.type(:ipmi_user) do
     end
 
     it 'rejects password over 20 characters when enable is true' do
-      expect {
+      expect do
         described_class.new(name: 'test', password: 'a' * 21, enable: :true)
-      }.to raise_error(Puppet::Error, %r{20 or fewer characters})
+      end.to raise_error(Puppet::Error, %r{20 or fewer characters})
     end
 
     it 'requires password when enable is true' do
-      expect {
+      expect do
         described_class.new(name: 'test', enable: :true)
-      }.to raise_error(Puppet::Error, %r{You must supply a password})
+      end.to raise_error(Puppet::Error, %r{You must supply a password})
     end
 
     it 'does not require password when enable is false' do
@@ -63,9 +63,9 @@ describe Puppet::Type.type(:ipmi_user) do
     end
 
     it 'rejects invalid priv values' do
-      expect {
+      expect do
         described_class.new(name: 'test', password: 'secret', priv: 5)
-      }.to raise_error(Puppet::Error, %r{priv must be})
+      end.to raise_error(Puppet::Error, %r{priv must be})
     end
 
     it 'accepts valid priv values' do
@@ -76,9 +76,9 @@ describe Puppet::Type.type(:ipmi_user) do
     end
 
     it 'rejects invalid user_id' do
-      expect {
+      expect do
         described_class.new(name: 'test', enable: :false, user_id: 0)
-      }.to raise_error(Puppet::Error, %r{user_id must be a positive integer})
+      end.to raise_error(Puppet::Error, %r{user_id must be a positive integer})
     end
   end
 end

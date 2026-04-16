@@ -26,7 +26,7 @@ describe 'ipmi::snmp', type: :define do
     it {
       is_expected.to contain_ipmi_snmp('ipmi_snmp_example').with(
         lan_channel: 1,
-        community: 'public',
+        community: 'public'
       )
     }
   end
@@ -44,7 +44,7 @@ describe 'ipmi::snmp', type: :define do
     it {
       is_expected.to contain_ipmi_snmp('ipmi_snmp_example').with(
         lan_channel: 2,
-        community: 'secret',
+        community: 'secret'
       )
     }
   end

@@ -27,7 +27,7 @@ describe 'ipmi::network', type: :define do
         it {
           is_expected.to contain_ipmi_network('ipmi_network_example').with(
             lan_channel: 1,
-            type: 'dhcp',
+            type: 'dhcp'
           )
         }
       end
@@ -48,7 +48,7 @@ describe 'ipmi::network', type: :define do
         it {
           is_expected.to contain_ipmi_network('ipmi_network_example').with(
             lan_channel: 1,
-            type: 'dhcp',
+            type: 'dhcp'
           )
         }
       end
@@ -71,7 +71,7 @@ describe 'ipmi::network', type: :define do
             type: 'static',
             ip: '1.1.1.10',
             netmask: '255.255.255.0',
-            gateway: '1.1.1.1',
+            gateway: '1.1.1.1'
           )
         }
       end
@@ -95,7 +95,7 @@ describe 'ipmi::network', type: :define do
             type: 'static',
             ip: '1.1.1.10',
             netmask: '255.255.255.0',
-            gateway: '1.1.1.1',
+            gateway: '1.1.1.1'
           )
         }
       end

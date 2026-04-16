@@ -5,13 +5,13 @@ require 'puppet/type/ipmi_network'
 
 describe Puppet::Type.type(:ipmi_network) do
   describe 'when validating attributes' do
-    [:name, :lan_channel, :ipmitool_cmd, :bmcconfig_cmd].each do |param|
+    %i[name lan_channel ipmitool_cmd bmcconfig_cmd].each do |param|
       it "has a #{param} parameter" do
         expect(described_class.attrtype(param)).to eq(:param)
       end
     end
 
-    [:type, :ip, :netmask, :gateway].each do |prop|
+    %i[type ip netmask gateway].each do |prop|
       it "has a #{prop} property" do
         expect(described_class.attrtype(prop)).to eq(:property)
       end
@@ -40,21 +40,21 @@ describe Puppet::Type.type(:ipmi_network) do
     end
 
     it 'rejects invalid IP addresses' do
-      expect {
+      expect do
         described_class.new(name: 'test', ip: 'not-an-ip')
-      }.to raise_error(Puppet::Error, %r{Invalid IP address})
+      end.to raise_error(Puppet::Error, %r{Invalid IP address})
     end
 
     it 'rejects invalid netmask' do
-      expect {
+      expect do
         described_class.new(name: 'test', netmask: 'bad')
-      }.to raise_error(Puppet::Error, %r{Invalid netmask})
+      end.to raise_error(Puppet::Error, %r{Invalid netmask})
     end
 
     it 'rejects invalid gateway' do
-      expect {
+      expect do
         described_class.new(name: 'test', gateway: 'bad')
-      }.to raise_error(Puppet::Error, %r{Invalid gateway})
+      end.to raise_error(Puppet::Error, %r{Invalid gateway})
     end
 
     it 'accepts valid IP addresses' do

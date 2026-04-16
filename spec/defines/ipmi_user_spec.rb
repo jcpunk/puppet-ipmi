@@ -32,7 +32,7 @@ describe 'ipmi::user', type: :define do
             priv: 4,
             channel: 1,
             enable: true,
-            purge_id_mismatch: false,
+            purge_id_mismatch: false
           )
         }
       end
@@ -56,7 +56,7 @@ describe 'ipmi::user', type: :define do
             password: 'password',
             priv: 3,
             channel: 1,
-            enable: true,
+            enable: true
           )
         }
       end
@@ -79,7 +79,7 @@ describe 'ipmi::user', type: :define do
             user_id: 4,
             priv: 3,
             channel: 1,
-            enable: true,
+            enable: true
           )
         }
       end
@@ -128,7 +128,7 @@ describe 'ipmi::user', type: :define do
 
         it {
           is_expected.to contain_ipmi_user('ipmi_user_newuser').with(
-            enable: false,
+            enable: false
           )
         }
       end
@@ -146,7 +146,7 @@ describe 'ipmi::user', type: :define do
         it {
           is_expected.to contain_ipmi_user('ipmi_user_newuser').with(
             enable: false,
-            purge_id_mismatch: true,
+            purge_id_mismatch: true
           )
         }
       end
@@ -171,7 +171,7 @@ describe 'ipmi::user', type: :define do
             priv: 3,
             channel: 1,
             enable: true,
-            purge_id_mismatch: true,
+            purge_id_mismatch: true
           )
         }
       end
@@ -195,7 +195,7 @@ describe 'ipmi::user', type: :define do
             user_id: 4,
             priv: 3,
             enable: true,
-            purge_id_mismatch: true,
+            purge_id_mismatch: true
           )
         }
       end

@@ -5,7 +5,7 @@ require 'puppet/type/ipmi_snmp'
 
 describe Puppet::Type.type(:ipmi_snmp) do
   describe 'when validating attributes' do
-    [:name, :lan_channel, :ipmitool_cmd, :bmcconfig_cmd].each do |param|
+    %i[name lan_channel ipmitool_cmd bmcconfig_cmd].each do |param|
       it "has a #{param} parameter" do
         expect(described_class.attrtype(param)).to eq(:param)
       end
