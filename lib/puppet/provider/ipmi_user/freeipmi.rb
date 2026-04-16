@@ -50,6 +50,35 @@ Puppet::Type.type(:ipmi_user).provide(
     "User#{user_id}"
   end
 
+  # ---------------------------------------------------------------------------
+  # Purge ID mismatch
+  # ---------------------------------------------------------------------------
+
+  # Scan all standard IPMI user slots (1-15) and disable any slot that holds
+  # the target username at an ID other than user_id.
+  def purge_mismatched_ids!
+    return unless [:true, true].include?(@resource[:purge_id_mismatch])
+    return unless [:true, true].include?(@resource[:enable])
+
+    (1..15).each do |slot|
+      next if slot == user_id
+
+      slot_section = "User#{slot}"
+      slot_username = bmc_config_get(slot_section, 'Username')
+      next if slot_username.nil?
+      next unless slot_username == user_name
+      next if slot_username =~ %r{^DISABLED_}
+
+      Puppet.debug("ipmi_user: purging #{user_name} from slot #{slot} (expected at #{user_id})")
+      bmc_config_set(slot_section, 'Username', "DISABLED_#{slot}")
+      bmc_config_set(slot_section, 'Enable_User', 'No')
+      bmc_config_set(slot_section, "Lan_Channel_Channel_#{channel}_Privilege_Limit", 'No_Access')
+      bmc_config_set(slot_section, "Lan_Channel_Channel_#{channel}_IPMI_Messaging", 'No')
+      bmc_config_set(slot_section, "Lan_Channel_Channel_#{channel}_Link_Authentication", 'No')
+      bmc_config_set(slot_section, "SOL_Payload_Channel_#{channel}", 'No')
+    end
+  end
+
   # Parse bmc-config checkout output for a given section and key.
   def bmc_config_get(section, key)
     output = bmcconfig_exec("--checkout --section #{section} 2>/dev/null")
@@ -81,6 +110,8 @@ Puppet::Type.type(:ipmi_user).provide(
   end
 
   def enable=(val)
+    purge_mismatched_ids!
+
     if [:true, true].include?(val)
       enable_user!
     else
