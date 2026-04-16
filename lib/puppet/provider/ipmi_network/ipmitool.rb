@@ -12,6 +12,14 @@ Puppet::Type.type(:ipmi_network).provide(
   confine commands: { ipmitool: 'ipmitool' }
   defaultfor kernel: 'Linux'
 
+  def ipmitool_cmd
+    @resource[:ipmitool_cmd] || '/usr/bin/ipmitool'
+  end
+
+  def ipmitool_exec(args, failonfail: false)
+    Puppet::Util::Execution.execute("#{ipmitool_cmd} #{args}", failonfail: failonfail)
+  end
+
   def lan_channel
     @resource[:lan_channel]
   end
@@ -22,7 +30,7 @@ Puppet::Type.type(:ipmi_network).provide(
 
   def type
     output = ipmitool_exec("lan print #{lan_channel} 2>/dev/null")
-    kv = parse_ipmitool_kv(output)
+    kv = parse_colon_kv(output)
     source = kv['IP Address Source']
     return nil if source.nil?
 
@@ -39,7 +47,7 @@ Puppet::Type.type(:ipmi_network).provide(
 
   def ip
     output = ipmitool_exec("lan print #{lan_channel} 2>/dev/null")
-    kv = parse_ipmitool_kv(output)
+    kv = parse_colon_kv(output)
     kv['IP Address']
   end
 
@@ -49,7 +57,7 @@ Puppet::Type.type(:ipmi_network).provide(
 
   def netmask
     output = ipmitool_exec("lan print #{lan_channel} 2>/dev/null")
-    kv = parse_ipmitool_kv(output)
+    kv = parse_colon_kv(output)
     kv['Subnet Mask']
   end
 
@@ -59,7 +67,7 @@ Puppet::Type.type(:ipmi_network).provide(
 
   def gateway
     output = ipmitool_exec("lan print #{lan_channel} 2>/dev/null")
-    kv = parse_ipmitool_kv(output)
+    kv = parse_colon_kv(output)
     kv['Default Gateway IP']
   end
 

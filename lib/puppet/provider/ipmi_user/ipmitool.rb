@@ -16,6 +16,14 @@ Puppet::Type.type(:ipmi_user).provide(
   # Helper methods
   # ---------------------------------------------------------------------------
 
+  def ipmitool_cmd
+    @resource[:ipmitool_cmd] || '/usr/bin/ipmitool'
+  end
+
+  def ipmitool_exec(args, failonfail: false)
+    Puppet::Util::Execution.execute("#{ipmitool_cmd} #{args}", failonfail: failonfail)
+  end
+
   def privilege_map
     { 4 => 'ADMINISTRATOR', 3 => 'OPERATOR', 2 => 'USER', 1 => 'CALLBACK' }
   end

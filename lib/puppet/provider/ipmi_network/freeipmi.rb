@@ -11,6 +11,14 @@ Puppet::Type.type(:ipmi_network).provide(
 
   confine commands: { bmcconfig: 'bmc-config' }
 
+  def bmcconfig_cmd
+    @resource[:bmcconfig_cmd] || '/usr/sbin/bmc-config'
+  end
+
+  def bmcconfig_exec(args, failonfail: false)
+    Puppet::Util::Execution.execute("#{bmcconfig_cmd} #{args}", failonfail: failonfail)
+  end
+
   def lan_channel
     @resource[:lan_channel]
   end

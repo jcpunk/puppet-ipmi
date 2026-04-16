@@ -15,6 +15,14 @@ Puppet::Type.type(:ipmi_user).provide(
   # Helper methods
   # ---------------------------------------------------------------------------
 
+  def bmcconfig_cmd
+    @resource[:bmcconfig_cmd] || '/usr/sbin/bmc-config'
+  end
+
+  def bmcconfig_exec(args, failonfail: false)
+    Puppet::Util::Execution.execute("#{bmcconfig_cmd} #{args}", failonfail: failonfail)
+  end
+
   def freeipmi_priv_map
     { 4 => 'Administrator', 3 => 'Operator', 2 => 'User', 1 => 'Callback' }
   end

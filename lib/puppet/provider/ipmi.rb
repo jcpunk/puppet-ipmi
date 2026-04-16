@@ -6,47 +6,18 @@ require 'shellwords'
 
 # Base provider for IPMI-managed resources.
 #
-# Provides shared helpers for executing ipmitool / bmc-config (freeipmi)
-# commands and parsing their output.  Concrete providers inherit from this
-# class and override tool-specific methods.
+# Provides generic helpers shared across all IPMI tool implementations.
+# Tool-specific execution (ipmitool, bmc-config) lives in the concrete
+# provider files rather than here.
 class Puppet::Provider::Ipmi < Puppet::Provider
-  # ---------------------------------------------------------------------------
-  # Execution helpers
-  # ---------------------------------------------------------------------------
-
-  # Run an ipmitool command and return stdout.
-  def ipmitool_exec(args, failonfail: false)
-    cmd = ipmitool_cmd
-    Puppet::Util::Execution.execute("#{cmd} #{args}", failonfail: failonfail)
-  end
-
-  # Run a bmc-config (freeipmi) command and return stdout.
-  def bmcconfig_exec(args, failonfail: false)
-    cmd = bmcconfig_cmd
-    Puppet::Util::Execution.execute("#{cmd} #{args}", failonfail: failonfail)
-  end
-
-  # Path to the ipmitool binary.
-  def ipmitool_cmd
-    @resource[:ipmitool_cmd] || '/usr/bin/ipmitool'
-  end
-
-  # Path to the bmc-config binary.
-  def bmcconfig_cmd
-    @resource[:bmcconfig_cmd] || '/usr/sbin/bmc-config'
-  end
-
   # Shell-escape a value for safe interpolation into command strings.
   def shellescape(val)
     Shellwords.escape(val.to_s)
   end
 
-  # ---------------------------------------------------------------------------
-  # Parsing helpers
-  # ---------------------------------------------------------------------------
-
-  # Parse key-value output from ipmitool (lines like "Key  : Value").
-  def parse_ipmitool_kv(output)
+  # Parse colon-separated key-value output (lines like "Key  : Value").
+  # Used by any provider that reads structured output in this format.
+  def parse_colon_kv(output)
     result = {}
     return result if output.nil? || output.empty?
 

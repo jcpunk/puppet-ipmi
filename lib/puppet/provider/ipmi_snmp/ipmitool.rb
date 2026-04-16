@@ -12,6 +12,14 @@ Puppet::Type.type(:ipmi_snmp).provide(
   confine commands: { ipmitool: 'ipmitool' }
   defaultfor kernel: 'Linux'
 
+  def ipmitool_cmd
+    @resource[:ipmitool_cmd] || '/usr/bin/ipmitool'
+  end
+
+  def ipmitool_exec(args, failonfail: false)
+    Puppet::Util::Execution.execute("#{ipmitool_cmd} #{args}", failonfail: failonfail)
+  end
+
   def lan_channel
     @resource[:lan_channel]
   end
@@ -22,7 +30,7 @@ Puppet::Type.type(:ipmi_snmp).provide(
 
   def community
     output = ipmitool_exec("lan print #{lan_channel} 2>/dev/null")
-    kv = parse_ipmitool_kv(output)
+    kv = parse_colon_kv(output)
     kv['SNMP Community String']
   end
 
