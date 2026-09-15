@@ -26,3 +26,11 @@ Gemfile:
     - gem: puppet-lint-strict_indent-check
     - gem: puppet-lint-unquoted_string-check
     - gem: puppet-lint-variable_contains_upcase
+    - gem: mocha
+      version: '~> 3.0'
+".github/workflows/prepare_release.yml":
+  git_name: Joshua Hoblitt
+  git_email: josh@hoblitt.com
+".github/workflows/create_tag.yml":
+  git_name: Joshua Hoblitt
+  git_email: josh@hoblitt.com
