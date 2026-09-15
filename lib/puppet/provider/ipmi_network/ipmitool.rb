@@ -33,6 +33,7 @@ Puppet::Type.type(:ipmi_network).provide(
     else
       ipmitool_exec(['lan', 'set', lan_channel.to_s, 'ipsrc', 'static'])
     end
+    invalidate_lan_print_cache!
   end
 
   # @return [String, nil] current IP address
@@ -44,6 +45,7 @@ Puppet::Type.type(:ipmi_network).provide(
   # @return [void]
   def ip=(val)
     ipmitool_exec(['lan', 'set', lan_channel.to_s, 'ipaddr', val.to_s])
+    invalidate_lan_print_cache!
   end
 
   # @return [String, nil] current subnet mask
@@ -55,6 +57,7 @@ Puppet::Type.type(:ipmi_network).provide(
   # @return [void]
   def netmask=(val)
     ipmitool_exec(['lan', 'set', lan_channel.to_s, 'netmask', val.to_s])
+    invalidate_lan_print_cache!
   end
 
   # @return [String, nil] current default gateway
@@ -66,5 +69,6 @@ Puppet::Type.type(:ipmi_network).provide(
   # @return [void]
   def gateway=(val)
     ipmitool_exec(['lan', 'set', lan_channel.to_s, 'defgw', 'ipaddr', val.to_s])
+    invalidate_lan_print_cache!
   end
 end

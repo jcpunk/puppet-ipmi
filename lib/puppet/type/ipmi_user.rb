@@ -127,10 +127,6 @@ Puppet::Type.newtype(:ipmi_user) do
         2 - USER
         1 - CALLBACK
     DESC
-    validate do |value|
-      v = value.to_i
-      raise Puppet::Error, "priv must be 1 (CALLBACK), 2 (USER), 3 (OPERATOR), or 4 (ADMINISTRATOR), got #{value}" unless [1, 2, 3, 4].include?(v)
-    end
     munge(&:to_i)
     defaultto 4
 
@@ -167,6 +163,9 @@ Puppet::Type.newtype(:ipmi_user) do
   # Validate the resource parameters
   validate do
     if self[:enable] == :true
+      priv = self[:priv]
+      raise Puppet::Error, "priv must be 1 (CALLBACK), 2 (USER), 3 (OPERATOR), or 4 (ADMINISTRATOR), got #{priv}" unless [1, 2, 3, 4].include?(priv)
+
       pw = self[:password]
       raise Puppet::Error, "You must supply a password to enable #{self[:user]} with ipmi_user" if pw.nil? || (pw.respond_to?(:empty?) && pw.empty?)
 

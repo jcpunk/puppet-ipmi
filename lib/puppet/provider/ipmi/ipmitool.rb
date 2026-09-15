@@ -75,4 +75,18 @@ class Puppet::Provider::Ipmi::Ipmitool < Puppet::Provider::Ipmi
     output = ipmitool_exec(['lan', 'print', lan_channel.to_s])
     @parse_lan_print = parse_colon_kv(output)
   end
+
+  # Invalidate cached `ipmitool user list` data.
+  #
+  # @return [void]
+  def invalidate_user_list_cache!
+    remove_instance_variable(:@parse_user_list) if defined?(@parse_user_list)
+  end
+
+  # Invalidate cached `ipmitool lan print` data.
+  #
+  # @return [void]
+  def invalidate_lan_print_cache!
+    remove_instance_variable(:@parse_lan_print) if defined?(@parse_lan_print)
+  end
 end

@@ -62,10 +62,15 @@ describe Puppet::Type.type(:ipmi_user) do
       expect(resource[:enable]).to eq(:false)
     end
 
-    it 'rejects invalid priv values' do
+    it 'rejects invalid priv values when enable is true' do
       expect do
         described_class.new(name: 'test', password: 'secret', priv: 5)
       end.to raise_error(Puppet::Error, %r{priv must be})
+    end
+
+    it 'accepts invalid priv values when enable is false' do
+      resource = described_class.new(name: 'test', enable: :false, priv: 5)
+      expect(resource[:priv]).to eq(5)
     end
 
     it 'accepts valid priv values' do

@@ -200,7 +200,7 @@ describe Puppet::Type.type(:ipmi_user).provider(:ipmitool) do
       expect(provider.enable).to eq(:false)
     end
 
-    it 'is false when privilege is Unknown (0x00)' do
+    it 'is false when the slot has no username' do
       provider_empty = resource_for(3).provider
       provider_empty.expects(:ipmitool_exec).with(%w[user list 1]).returns(supermicro_list)
 
@@ -251,6 +251,27 @@ describe Puppet::Type.type(:ipmi_user).provider(:ipmitool) do
               .with(%w[channel setaccess 1 4 callin=on ipmi=on link=on privilege=3])
 
       provider.priv = 3
+    end
+  end
+
+  describe 'user list caching' do
+    let(:provider) { resource_for(4).provider }
+
+    it 'calls ipmitool user list only once per provider instance' do
+      provider.expects(:ipmitool_exec).with(%w[user list 1]).returns(asus_list).once
+
+      provider.enable
+      provider.priv
+      provider.user
+    end
+
+    it 'invalidates the cache after a write' do
+      provider.expects(:ipmitool_exec).with(%w[user list 1]).returns(asus_list).twice
+      provider.expects(:ipmitool_exec).with(%w[user set name 4 NEWNAME])
+
+      provider.user
+      provider.user = 'NEWNAME'
+      provider.user
     end
   end
 
@@ -305,6 +326,88 @@ describe Puppet::Type.type(:ipmi_user).provider(:ipmitool) do
       resource.provider.stubs(:password_insync?).returns(true)
       resource.provider.expects(:purge_id_mismatch).returns(:false)
       resource.provider.expects(:purge_id_mismatch=)
+
+      catalog.apply
+    ensure
+      FileUtils.rm_rf(state_dir)
+    end
+
+    it 'purges a duplicate slot through a real transaction' do
+      state_dir = Dir.mktmpdir
+      Puppet[:statedir] = state_dir
+
+      duplicate_list = <<~LIST
+        ID  Name             Callin  Link Auth  IPMI Msg   Channel Priv Limit
+        1                    true    false      false      Unknown (0x00)
+        2   ADMIN            true    true       true       ADMINISTRATOR
+        3                    true    false      false      Unknown (0x00)
+        4   SLAM             true    true       true       ADMINISTRATOR
+        5                    true    false      false      Unknown (0x00)
+        6                    true    false      false      Unknown (0x00)
+        7   SLAM             true    true       true       ADMINISTRATOR
+      LIST
+
+      resource = type.new(
+        name: 'test',
+        user: 'SLAM',
+        password: 'secret',
+        user_id: 4,
+        channel: 1,
+        enable: :true,
+        priv: 4,
+        purge_id_mismatch: :true,
+        provider: 'ipmitool',
+      )
+      catalog = Puppet::Resource::Catalog.new
+      catalog.add_resource(resource)
+
+      resource.provider.expects(:ipmitool_exec).with(%w[user list 1]).returns(duplicate_list).at_least_once
+      resource.provider.expects(:ipmitool_exec).with(%w[user test 4 16], stdin: 'secret', sensitive: true, failonfail: false).returns(stub('result', exitstatus: 0))
+      resource.provider.expects(:ipmitool_exec).with(%w[user set name 7 DISABLED_7])
+      resource.provider.expects(:ipmitool_exec).with(%w[user disable 7])
+      resource.provider.expects(:ipmitool_exec)
+              .with(%w[channel setaccess 1 7 callin=off ipmi=off link=off privilege=15])
+
+      catalog.apply
+    ensure
+      FileUtils.rm_rf(state_dir)
+    end
+
+    it 'purges a duplicate slot when user_id is auto' do
+      state_dir = Dir.mktmpdir
+      Puppet[:statedir] = state_dir
+
+      duplicate_list = <<~LIST
+        ID  Name             Callin  Link Auth  IPMI Msg   Channel Priv Limit
+        1                    true    false      false      Unknown (0x00)
+        2   ADMIN            true    true       true       ADMINISTRATOR
+        3                    true    false      false      Unknown (0x00)
+        4   SLAM             true    true       true       ADMINISTRATOR
+        5                    true    false      false      Unknown (0x00)
+        6                    true    false      false      Unknown (0x00)
+        7   SLAM             true    true       true       ADMINISTRATOR
+      LIST
+
+      resource = type.new(
+        name: 'test',
+        user: 'SLAM',
+        password: 'secret',
+        user_id: 'auto',
+        channel: 1,
+        enable: :true,
+        priv: 4,
+        purge_id_mismatch: :true,
+        provider: 'ipmitool',
+      )
+      catalog = Puppet::Resource::Catalog.new
+      catalog.add_resource(resource)
+
+      resource.provider.expects(:ipmitool_exec).with(%w[user list 1]).returns(duplicate_list).at_least_once
+      resource.provider.expects(:ipmitool_exec).with(%w[user test 4 16], stdin: 'secret', sensitive: true, failonfail: false).returns(stub('result', exitstatus: 0))
+      resource.provider.expects(:ipmitool_exec).with(%w[user set name 7 DISABLED_7])
+      resource.provider.expects(:ipmitool_exec).with(%w[user disable 7])
+      resource.provider.expects(:ipmitool_exec)
+              .with(%w[channel setaccess 1 7 callin=off ipmi=off link=off privilege=15])
 
       catalog.apply
     ensure

@@ -84,6 +84,13 @@ Puppet::Type.type(:ipmi_user).provide(
     "User#{resolved_user_id}"
   end
 
+  # Invalidate cached user list data.
+  #
+  # @return [void]
+  def invalidate_all_users_cache!
+    remove_instance_variable(:@list_all_users) if defined?(@list_all_users)
+  end
+
   # ---------------------------------------------------------------------------
   # Properties
   # ---------------------------------------------------------------------------
@@ -97,6 +104,8 @@ Puppet::Type.type(:ipmi_user).provide(
   # @return [void]
   def user=(val)
     bmc_config_set(user_section, 'Username', val.to_s)
+    invalidate_section_cache!(user_section)
+    invalidate_all_users_cache!
   end
 
   # Passwords cannot be read back from the BMC.
@@ -130,7 +139,10 @@ Puppet::Type.type(:ipmi_user).provide(
   # @return [void]
   def password=(_val)
     pw = real_password
-    bmc_config_set(user_section, 'Password', pw, sensitive: true) if pw && !pw.empty?
+    return unless pw && !pw.empty?
+
+    bmc_config_set(user_section, 'Password', pw, sensitive: true)
+    invalidate_section_cache!(user_section)
   end
 
   # @return [Symbol] :true if the slot is enabled, :false otherwise
@@ -168,6 +180,7 @@ Puppet::Type.type(:ipmi_user).provide(
   def priv=(val)
     priv_name = freeipmi_priv_map[val] || 'Administrator'
     bmc_config_set(user_section, 'Lan_Privilege_Limit', priv_name)
+    invalidate_section_cache!(user_section)
   end
 
   # @return [Symbol] :true if no mismatched slot exists, :false otherwise
@@ -185,11 +198,10 @@ Puppet::Type.type(:ipmi_user).provide(
 
   # @return [Boolean] true if another slot holds the target username
   def mismatched_slot_exists?
-    (1..max_user_slot).any? do |slot|
-      next if slot == resolved_user_id
+    list_all_users.any? do |entry|
+      next if entry[:id] == resolved_user_id
 
-      slot_username = bmc_config_get("User#{slot}", 'Username')
-      slot_username && slot_username == user_name && slot_username !~ %r{^DISABLED_}
+      entry[:name] == user_name && entry[:name] !~ %r{^DISABLED_}
     end
   end
 
@@ -198,15 +210,16 @@ Puppet::Type.type(:ipmi_user).provide(
   #
   # @return [void]
   def purge_mismatched_ids!
-    (1..max_user_slot).each do |slot|
-      next if slot == resolved_user_id
+    list_all_users.each do |entry|
+      next if entry[:id] == resolved_user_id
 
-      slot_section = "User#{slot}"
-      slot_username = bmc_config_get(slot_section, 'Username')
-      next if slot_username.nil?
+      slot_username = entry[:name]
+      next if slot_username.nil? || slot_username.empty?
       next unless slot_username == user_name
       next if slot_username =~ %r{^DISABLED_}
 
+      slot = entry[:id]
+      slot_section = "User#{slot}"
       Puppet.debug("ipmi_user: purging #{user_name} from slot #{slot} (expected at #{resolved_user_id})")
       bmc_config_set(slot_section, 'Username', "DISABLED_#{slot}")
       bmc_config_set(slot_section, 'Enable_User', 'No')
@@ -214,7 +227,9 @@ Puppet::Type.type(:ipmi_user).provide(
       bmc_config_set(slot_section, 'Lan_Enable_IPMI_Msgs', 'No')
       bmc_config_set(slot_section, 'Lan_Enable_Link_Auth', 'No')
       bmc_config_set(slot_section, 'SOL_Payload_Access', 'No')
+      invalidate_section_cache!(slot_section)
     end
+    invalidate_all_users_cache!
   end
 
   # Enable the resolved slot with the configured username, password, privilege,
@@ -245,6 +260,9 @@ Puppet::Type.type(:ipmi_user).provide(
 
     # Enable SOL payload
     bmc_config_set(user_section, 'SOL_Payload_Access', 'Yes')
+
+    invalidate_section_cache!(user_section)
+    invalidate_all_users_cache!
   end
 
   # Disable the resolved slot by removing privileges and channel access.
@@ -265,5 +283,7 @@ Puppet::Type.type(:ipmi_user).provide(
 
     # Disable SOL payload
     bmc_config_set(user_section, 'SOL_Payload_Access', 'No')
+
+    invalidate_section_cache!(user_section)
   end
 end

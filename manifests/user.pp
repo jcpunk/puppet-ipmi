@@ -36,7 +36,7 @@
 #   BMC-standard equivalent. Defaults to false. Only applies when $enable is true.
 #
 define ipmi::user (
-  String $user                                                   = 'root',
+  String[1, 16] $user                                             = 'root',
   Integer[1, 4] $priv                                            = 4,
   Boolean $enable                                                = true,
   Variant[Integer, Enum['auto']] $user_id                        = 3,

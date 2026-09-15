@@ -28,6 +28,7 @@ Puppet::Type.type(:ipmi_network).provide(
   def type=(val)
     source = (val.to_s == 'dhcp') ? 'Use_DHCP' : 'Static'
     bmc_config_set('Lan_Conf', 'IP_Address_Source', source, channel: lan_channel)
+    invalidate_section_cache!('Lan_Conf', channel: lan_channel)
   end
 
   # @return [String, nil] current IP address
@@ -39,6 +40,7 @@ Puppet::Type.type(:ipmi_network).provide(
   # @return [void]
   def ip=(val)
     bmc_config_set('Lan_Conf', 'IP_Address', val.to_s, channel: lan_channel)
+    invalidate_section_cache!('Lan_Conf', channel: lan_channel)
   end
 
   # @return [String, nil] current subnet mask
@@ -50,6 +52,7 @@ Puppet::Type.type(:ipmi_network).provide(
   # @return [void]
   def netmask=(val)
     bmc_config_set('Lan_Conf', 'Subnet_Mask', val.to_s, channel: lan_channel)
+    invalidate_section_cache!('Lan_Conf', channel: lan_channel)
   end
 
   # @return [String, nil] current default gateway
@@ -61,5 +64,6 @@ Puppet::Type.type(:ipmi_network).provide(
   # @return [void]
   def gateway=(val)
     bmc_config_set('Lan_Conf', 'Default_Gateway_IP_Address', val.to_s, channel: lan_channel)
+    invalidate_section_cache!('Lan_Conf', channel: lan_channel)
   end
 end

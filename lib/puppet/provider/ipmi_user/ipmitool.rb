@@ -62,6 +62,7 @@ Puppet::Type.type(:ipmi_user).provide(
   # @return [void]
   def user=(val)
     ipmitool_exec(['user', 'set', 'name', resolved_user_id.to_s, val.to_s])
+    invalidate_user_list_cache!
   end
 
   # Passwords cannot be read back from the BMC.
@@ -101,17 +102,15 @@ Puppet::Type.type(:ipmi_user).provide(
       ['user', 'set', 'password', resolved_user_id.to_s, pw, capacity],
       sensitive: true,
     )
+    invalidate_user_list_cache!
   end
 
   # @return [Symbol] :true if the slot is enabled, :false otherwise
   def enable
     entry = find_user_by_id(resolved_user_id)
-    return :false if entry.nil?
-    return :false if entry[:name].nil? || entry[:name].empty?
-    return :false if entry[:privilege] == 'NO ACCESS'
-    return :false if privilege_map.key(entry[:privilege]).nil?
+    return :false if entry.nil? || entry[:name].empty?
 
-    :true
+    (entry[:privilege] == 'NO ACCESS') ? :false : :true
   end
 
   # @param val [Symbol] :true to enable, :false to disable
@@ -140,6 +139,7 @@ Puppet::Type.type(:ipmi_user).provide(
     ipmitool_exec(
       ['channel', 'setaccess', channel.to_s, resolved_user_id.to_s, 'callin=on', 'ipmi=on', 'link=on', "privilege=#{val}"],
     )
+    invalidate_user_list_cache!
   end
 
   # @return [Symbol] :true if no mismatched slot exists, :false otherwise
@@ -178,6 +178,7 @@ Puppet::Type.type(:ipmi_user).provide(
       ipmitool_exec(
         ['channel', 'setaccess', channel.to_s, entry[:id].to_s, 'callin=off', 'ipmi=off', 'link=off', 'privilege=15'],
       )
+      invalidate_user_list_cache!
     end
   end
 
@@ -213,6 +214,8 @@ Puppet::Type.type(:ipmi_user).provide(
     ipmitool_exec(
       ['channel', 'setaccess', channel.to_s, resolved_user_id.to_s, 'callin=on', 'ipmi=on', 'link=on', "privilege=#{priv_level}"],
     )
+
+    invalidate_user_list_cache!
   end
 
   # Disable the resolved slot by removing privileges and channel access.
@@ -232,5 +235,7 @@ Puppet::Type.type(:ipmi_user).provide(
     ipmitool_exec(
       ['channel', 'setaccess', channel.to_s, resolved_user_id.to_s, 'callin=off', 'ipmi=off', 'link=off', 'privilege=15'],
     )
+
+    invalidate_user_list_cache!
   end
 end

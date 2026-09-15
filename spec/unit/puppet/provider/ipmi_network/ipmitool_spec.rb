@@ -72,4 +72,26 @@ describe Puppet::Type.type(:ipmi_network).provider(:ipmitool) do
       provider.gateway = '192.168.1.1'
     end
   end
+
+  describe 'lan print caching' do
+    let(:provider) { resource_for(lan_channel: 1).provider }
+
+    it 'calls ipmitool lan print only once per provider instance' do
+      provider.expects(:ipmitool_exec).with(%w[lan print 1]).returns(lan_print).once
+
+      provider.type
+      provider.ip
+      provider.netmask
+      provider.gateway
+    end
+
+    it 'invalidates the cache after a write' do
+      provider.expects(:ipmitool_exec).with(%w[lan print 1]).returns(lan_print).twice
+      provider.expects(:ipmitool_exec).with(%w[lan set 1 ipaddr 192.168.1.100])
+
+      provider.ip
+      provider.ip = '192.168.1.100'
+      provider.ip
+    end
+  end
 end

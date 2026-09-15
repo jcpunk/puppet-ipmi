@@ -273,6 +273,42 @@ describe Puppet::Type.type(:ipmi_user).provider(:freeipmi) do
     end
   end
 
+  describe 'user section caching' do
+    let(:provider) { resource_for(4).provider }
+
+    it 'checks out User4 only once per provider instance' do
+      provider.expects(:bmcconfig_exec)
+              .with(['--checkout', '--section', 'User4'])
+              .returns(<<~SECTION)
+                Username                                      NEWUSER
+                Enable_User                                   Yes
+                Lan_Privilege_Limit                           Administrator
+              SECTION
+              .once
+
+      provider.user
+      provider.enable
+      provider.priv
+    end
+
+    it 'invalidates the section cache after a write' do
+      provider.expects(:bmcconfig_exec)
+              .with(['--checkout', '--section', 'User4'])
+              .returns(<<~SECTION)
+                Username                                      NEWUSER
+                Enable_User                                   Yes
+                Lan_Privilege_Limit                           Administrator
+              SECTION
+              .twice
+      provider.expects(:bmcconfig_exec)
+              .with(['--commit', '--key-pair', 'User4:Username=RENAMED'], sensitive: false)
+
+      provider.user
+      provider.user = 'RENAMED'
+      provider.user
+    end
+  end
+
   describe 'when the resource is disabled' do
     it 'does not sync priv or enable' do
       state_dir = Dir.mktmpdir
@@ -316,17 +352,12 @@ describe Puppet::Type.type(:ipmi_user).provider(:freeipmi) do
         Username                                      NEWUSER
         EndSection
       CHECKOUT
-      provider.expects(:bmcconfig_exec).with(['--checkout', '--section', 'User1']).returns('')
-      provider.expects(:bmcconfig_exec).with(['--checkout', '--section', 'User2']).returns("Username                                      NEWUSER\n")
 
       expect(provider.purge_id_mismatch).to eq(:false)
     end
 
     it 'returns :true when no duplicate username exists' do
       provider.expects(:bmcconfig_exec).with(['--checkout']).returns(supermicro_checkout)
-      [1, 2, 3, 5, 6, 7, 8, 9, 10].each do |slot|
-        provider.expects(:bmcconfig_exec).with(['--checkout', '--section', "User#{slot}"]).returns("Username                                      \n")
-      end
 
       expect(provider.purge_id_mismatch).to eq(:true)
     end
@@ -344,9 +375,6 @@ describe Puppet::Type.type(:ipmi_user).provider(:freeipmi) do
         Username                                      NEWUSER
         EndSection
       CHECKOUT
-      provider.expects(:bmcconfig_exec).with(['--checkout', '--section', 'User1']).returns('')
-      provider.expects(:bmcconfig_exec).with(['--checkout', '--section', 'User2']).returns("Username                                      NEWUSER\n")
-      provider.expects(:bmcconfig_exec).with(['--checkout', '--section', 'User3']).returns('')
       provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User2:Username=DISABLED_2'], sensitive: false)
       provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User2:Enable_User=No'], sensitive: false)
       provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User2:Lan_Privilege_Limit=No_Access'], sensitive: false)

@@ -115,4 +115,15 @@ class Puppet::Provider::Ipmi::Freeipmi < Puppet::Provider::Ipmi
     end
     result
   end
+
+  # Invalidate cached data for a bmc-config section.
+  #
+  # @param section [String] section name
+  # @param channel [Integer, nil] optional LAN channel number
+  # @return [void]
+  def invalidate_section_cache!(section, channel: nil)
+    return unless defined?(@section_cache)
+
+    @section_cache.delete([section.to_s, channel])
+  end
 end

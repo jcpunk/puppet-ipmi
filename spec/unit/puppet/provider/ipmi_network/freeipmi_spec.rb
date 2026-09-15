@@ -79,4 +79,33 @@ describe Puppet::Type.type(:ipmi_network).provider(:freeipmi) do
       provider.gateway = '192.168.1.1'
     end
   end
+
+  describe 'bmc-config section caching' do
+    let(:provider) { resource_for(lan_channel: 1).provider }
+
+    it 'checks out Lan_Conf only once per provider instance' do
+      provider.expects(:bmcconfig_exec)
+              .with(['--checkout', '--section', 'Lan_Conf', '--lan-channel-number', '1'])
+              .returns(lan_conf)
+              .once
+
+      provider.type
+      provider.ip
+      provider.netmask
+      provider.gateway
+    end
+
+    it 'invalidates the section cache after a write' do
+      provider.expects(:bmcconfig_exec)
+              .with(['--checkout', '--section', 'Lan_Conf', '--lan-channel-number', '1'])
+              .returns(lan_conf)
+              .twice
+      provider.expects(:bmcconfig_exec)
+              .with(['--commit', '--key-pair', 'Lan_Conf:IP_Address=192.168.1.100', '--lan-channel-number', '1'], sensitive: false)
+
+      provider.ip
+      provider.ip = '192.168.1.100'
+      provider.ip
+    end
+  end
 end
