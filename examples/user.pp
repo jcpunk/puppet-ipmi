@@ -1,4 +1,4 @@
-ipmi::user { 'test':
+ipmi_user { 'test':
   user     => 'test',
   password => 'password',
   user_id  => 4,
