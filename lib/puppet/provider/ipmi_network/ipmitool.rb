@@ -9,7 +9,7 @@ Puppet::Type.type(:ipmi_network).provide(
 ) do
   desc 'Manage BMC network configuration via ipmitool'
 
-  confine commands: { ipmitool: 'ipmitool' }
+  commands ipmitool: 'ipmitool'
   defaultfor kernel: 'Linux'
 
   # ---------------------------------------------------------------------------

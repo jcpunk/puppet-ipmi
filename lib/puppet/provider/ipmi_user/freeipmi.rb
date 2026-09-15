@@ -9,7 +9,7 @@ Puppet::Type.type(:ipmi_user).provide(
 ) do
   desc 'Manage BMC user accounts via freeipmi (bmc-config)'
 
-  confine commands: { bmcconfig: 'bmc-config' }
+  commands bmcconfig: 'bmc-config'
 
   def freeipmi_priv_map
     { 4 => 'Administrator', 3 => 'Operator', 2 => 'User', 1 => 'Callback' }
@@ -34,7 +34,7 @@ Puppet::Type.type(:ipmi_user).provide(
   def list_all_users
     return @list_all_users if defined?(@list_all_users)
 
-    output = bmcconfig_exec(['--checkout'])
+    output = bmcconfig_exec(['--checkout'], failonfail: true)
     return @list_all_users = [] if output.nil? || output.empty?
 
     section_ids = []
@@ -96,7 +96,7 @@ Puppet::Type.type(:ipmi_user).provide(
 
   def password=(_val)
     pw = real_password
-    bmc_config_set(user_section, 'Password', pw) if pw && !pw.empty?
+    bmc_config_set(user_section, 'Password', pw, sensitive: true) if pw && !pw.empty?
   end
 
   def enable
@@ -177,7 +177,7 @@ Puppet::Type.type(:ipmi_user).provide(
 
     # Set password
     pw = real_password
-    bmc_config_set(user_section, 'Password', pw) if pw && !pw.empty?
+    bmc_config_set(user_section, 'Password', pw, sensitive: true) if pw && !pw.empty?
 
     # Enable user
     bmc_config_set(user_section, 'Enable_User', 'Yes')

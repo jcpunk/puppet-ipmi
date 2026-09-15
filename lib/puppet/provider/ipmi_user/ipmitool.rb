@@ -9,7 +9,7 @@ Puppet::Type.type(:ipmi_user).provide(
 ) do
   desc 'Manage BMC user accounts via ipmitool'
 
-  confine commands: { ipmitool: 'ipmitool' }
+  commands ipmitool: 'ipmitool'
   defaultfor kernel: 'Linux'
 
   def privilege_map
@@ -90,6 +90,7 @@ Puppet::Type.type(:ipmi_user).provide(
     return :false if entry.nil?
     return :false if entry[:name].nil? || entry[:name].empty?
     return :false if entry[:privilege] == 'NO ACCESS'
+    return :false if privilege_map.key(entry[:privilege]).nil?
 
     :true
   end

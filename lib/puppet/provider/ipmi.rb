@@ -53,7 +53,7 @@ class Puppet::Provider::Ipmi < Puppet::Provider
   # AUTO_ALLOCATED_USER_IDS so that multiple `auto` resources cannot
   # resolve to the same slot before any of them have been applied.
   def resolve_auto_user_id(user_name, users)
-    existing = users.find { |u| u[:name] == user_name }
+    existing = users.find { |u| u[:name] == user_name && u[:id] != 1 }
     if existing
       AUTO_ALLOCATED_USER_IDS << existing[:id]
       return existing[:id]

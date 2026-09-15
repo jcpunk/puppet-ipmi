@@ -15,9 +15,11 @@ class Puppet::Provider::Ipmi::Freeipmi < Puppet::Provider::Ipmi
   # @param argv [Array<String>] subcommand and arguments
   # @param failonfail [Boolean] whether to raise on non-zero exit
   # @return [Puppet::Util::Execution::ProcessOutput]
-  def bmcconfig_exec(argv, failonfail: false)
+  def bmcconfig_exec(argv, failonfail: false, sensitive: false)
     cmd = [bmcconfig_cmd] + Array(argv)
-    Puppet::Util::Execution.execute(cmd, failonfail: failonfail)
+    options = { failonfail: failonfail, combine: true }
+    options[:sensitive] = true if sensitive
+    Puppet::Util::Execution.execute(cmd, options)
   end
 
   # @return [Integer] IPMI channel for user management
@@ -50,10 +52,10 @@ class Puppet::Provider::Ipmi::Freeipmi < Puppet::Provider::Ipmi
   # @param value [String] field value
   # @param channel [Integer, nil] optional LAN channel number
   # @return [void]
-  def bmc_config_set(section, key, value, channel: nil)
+  def bmc_config_set(section, key, value, channel: nil, sensitive: false)
     argv = ['--commit', '--key-pair', "#{section}:#{key}=#{value}"]
     argv += ['--lan-channel-number', channel.to_s] if channel
-    bmcconfig_exec(argv, failonfail: true)
+    bmcconfig_exec(argv, failonfail: true, sensitive: sensitive)
   end
 
   private

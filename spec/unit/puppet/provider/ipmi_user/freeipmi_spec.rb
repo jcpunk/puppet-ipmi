@@ -27,6 +27,8 @@ describe Puppet::Type.type(:ipmi_user).provider(:freeipmi) do
     Puppet::Provider::Ipmi.reset_auto_allocated_user_ids!
   end
 
+  it_behaves_like 'command-confined provider', :bmcconfig
+
   def resource_for(user_id)
     type.new(
       name: 'test',
@@ -53,13 +55,23 @@ describe Puppet::Type.type(:ipmi_user).provider(:freeipmi) do
       slam_resource = type.new(base_params.merge(user: 'SLAM', user_id: 'auto'))
       slam_provider = slam_resource.provider
 
-      slam_provider.expects(:bmcconfig_exec).with(['--checkout']).returns(asus_checkout)
+      slam_provider.expects(:bmcconfig_exec).with(['--checkout'], failonfail: true).returns(asus_checkout)
 
       expect(slam_provider.resolved_user_id).to eq(4)
     end
 
     it 'selects the lowest free slot, skipping id 1' do
-      provider.expects(:bmcconfig_exec).with(['--checkout']).returns(supermicro_checkout)
+      provider.expects(:bmcconfig_exec).with(['--checkout'], failonfail: true).returns(supermicro_checkout)
+
+      expect(provider.resolved_user_id).to eq(3)
+    end
+
+    it 'never resolves auto to slot 1, even when slot 1 holds the requested name' do
+      checkout = supermicro_checkout.gsub(
+        '## Username                                   NULL',
+        'Username                                      NEWUSER',
+      )
+      provider.expects(:bmcconfig_exec).with(['--checkout'], failonfail: true).returns(checkout)
 
       expect(provider.resolved_user_id).to eq(3)
     end
@@ -68,13 +80,13 @@ describe Puppet::Type.type(:ipmi_user).provider(:freeipmi) do
       disabled_checkout = asus_checkout.gsub('Username                                      SLAM',
                                              'Username                                      DISABLED_4')
 
-      provider.expects(:bmcconfig_exec).with(['--checkout']).returns(disabled_checkout)
+      provider.expects(:bmcconfig_exec).with(['--checkout'], failonfail: true).returns(disabled_checkout)
 
       expect(provider.resolved_user_id).to eq(4)
     end
 
     it 'falls back to a maximum of 15 when checkout output is empty' do
-      provider.expects(:bmcconfig_exec).with(['--checkout']).returns('')
+      provider.expects(:bmcconfig_exec).with(['--checkout'], failonfail: true).returns('')
 
       expect(provider.resolved_user_id).to eq(2)
     end
@@ -85,9 +97,16 @@ describe Puppet::Type.type(:ipmi_user).provider(:freeipmi) do
         full_checkout += "Section User#{id}\nUsername user#{id}\nEndSection\n"
       end
 
-      provider.expects(:bmcconfig_exec).with(['--checkout']).returns(full_checkout)
+      provider.expects(:bmcconfig_exec).with(['--checkout'], failonfail: true).returns(full_checkout)
 
       expect { provider.resolved_user_id }.to raise_error(Puppet::Error, %r{No free IPMI user slot})
+    end
+
+    it 'raises when the checkout command fails' do
+      result = Puppet::Util::Execution::ProcessOutput.new('Unable to establish LAN session', 1)
+      provider.expects(:bmcconfig_exec).with(['--checkout'], failonfail: true).raises(Puppet::ExecutionFailure, result)
+
+      expect { provider.resolved_user_id }.to raise_error(Puppet::ExecutionFailure)
     end
 
     it 'allocates distinct ids for multiple auto resources' do
@@ -96,8 +115,8 @@ describe Puppet::Type.type(:ipmi_user).provider(:freeipmi) do
       provider_a = resource_a.provider
       provider_b = resource_b.provider
 
-      provider_a.expects(:bmcconfig_exec).with(['--checkout']).returns(supermicro_checkout)
-      provider_b.expects(:bmcconfig_exec).with(['--checkout']).returns(supermicro_checkout)
+      provider_a.expects(:bmcconfig_exec).with(['--checkout'], failonfail: true).returns(supermicro_checkout)
+      provider_b.expects(:bmcconfig_exec).with(['--checkout'], failonfail: true).returns(supermicro_checkout)
 
       id_a = provider_a.resolved_user_id
       id_b = provider_b.resolved_user_id
@@ -127,7 +146,7 @@ describe Puppet::Type.type(:ipmi_user).provider(:freeipmi) do
 
     it 'sets the username' do
       provider.expects(:bmcconfig_exec)
-              .with(['--commit', '--key-pair', 'User4:Username=NEWUSER'], failonfail: true)
+              .with(['--commit', '--key-pair', 'User4:Username=NEWUSER'], failonfail: true, sensitive: false)
 
       provider.user = 'NEWUSER'
     end
@@ -146,7 +165,7 @@ describe Puppet::Type.type(:ipmi_user).provider(:freeipmi) do
 
     it 'sets the password' do
       provider.expects(:bmcconfig_exec)
-              .with(['--commit', '--key-pair', 'User4:Password=secret'], failonfail: true)
+              .with(['--commit', '--key-pair', 'User4:Password=secret'], failonfail: true, sensitive: true)
 
       provider.password = 'secret'
     end
@@ -154,7 +173,7 @@ describe Puppet::Type.type(:ipmi_user).provider(:freeipmi) do
     it 'unwraps Sensitive passwords' do
       provider.resource[:password] = Puppet::Pops::Types::PSensitiveType::Sensitive.new('secret')
       provider.expects(:bmcconfig_exec)
-              .with(['--commit', '--key-pair', 'User4:Password=secret'], failonfail: true)
+              .with(['--commit', '--key-pair', 'User4:Password=secret'], failonfail: true, sensitive: true)
 
       provider.password = 'secret'
     end
@@ -188,23 +207,23 @@ describe Puppet::Type.type(:ipmi_user).provider(:freeipmi) do
     end
 
     it 'enables a user' do
-      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User4:Username=NEWUSER'], failonfail: true)
-      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User4:Password=secret'], failonfail: true)
-      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User4:Enable_User=Yes'], failonfail: true)
-      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User4:Lan_Privilege_Limit=Administrator'], failonfail: true)
-      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User4:Lan_Enable_IPMI_Msgs=Yes'], failonfail: true)
-      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User4:Lan_Enable_Link_Auth=Yes'], failonfail: true)
-      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User4:SOL_Payload_Access=Yes'], failonfail: true)
+      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User4:Username=NEWUSER'], failonfail: true, sensitive: false)
+      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User4:Password=secret'], failonfail: true, sensitive: true)
+      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User4:Enable_User=Yes'], failonfail: true, sensitive: false)
+      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User4:Lan_Privilege_Limit=Administrator'], failonfail: true, sensitive: false)
+      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User4:Lan_Enable_IPMI_Msgs=Yes'], failonfail: true, sensitive: false)
+      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User4:Lan_Enable_Link_Auth=Yes'], failonfail: true, sensitive: false)
+      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User4:SOL_Payload_Access=Yes'], failonfail: true, sensitive: false)
 
       provider.enable = :true
     end
 
     it 'disables a user' do
-      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User4:Enable_User=No'], failonfail: true)
-      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User4:Lan_Privilege_Limit=No_Access'], failonfail: true)
-      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User4:Lan_Enable_IPMI_Msgs=No'], failonfail: true)
-      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User4:Lan_Enable_Link_Auth=No'], failonfail: true)
-      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User4:SOL_Payload_Access=No'], failonfail: true)
+      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User4:Enable_User=No'], failonfail: true, sensitive: false)
+      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User4:Lan_Privilege_Limit=No_Access'], failonfail: true, sensitive: false)
+      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User4:Lan_Enable_IPMI_Msgs=No'], failonfail: true, sensitive: false)
+      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User4:Lan_Enable_Link_Auth=No'], failonfail: true, sensitive: false)
+      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User4:SOL_Payload_Access=No'], failonfail: true, sensitive: false)
 
       provider.enable = :false
     end
@@ -224,7 +243,7 @@ describe Puppet::Type.type(:ipmi_user).provider(:freeipmi) do
 
     it 'sets privilege' do
       provider.expects(:bmcconfig_exec)
-              .with(['--commit', '--key-pair', 'User4:Lan_Privilege_Limit=Operator'], failonfail: true)
+              .with(['--commit', '--key-pair', 'User4:Lan_Privilege_Limit=Operator'], failonfail: true, sensitive: false)
 
       provider.priv = 3
     end
@@ -261,7 +280,7 @@ describe Puppet::Type.type(:ipmi_user).provider(:freeipmi) do
     let(:provider) { resource_for(4).provider }
 
     it 'returns :false when a duplicate username exists' do
-      provider.expects(:bmcconfig_exec).with(['--checkout']).returns(<<~CHECKOUT)
+      provider.expects(:bmcconfig_exec).with(['--checkout'], failonfail: true).returns(<<~CHECKOUT)
         Section User1
         EndSection
         Section User2
@@ -280,7 +299,7 @@ describe Puppet::Type.type(:ipmi_user).provider(:freeipmi) do
     end
 
     it 'returns :true when no duplicate username exists' do
-      provider.expects(:bmcconfig_exec).with(['--checkout']).returns(supermicro_checkout)
+      provider.expects(:bmcconfig_exec).with(['--checkout'], failonfail: true).returns(supermicro_checkout)
       [1, 2, 3, 5, 6, 7, 8, 9, 10].each do |slot|
         provider.expects(:bmcconfig_exec).with(['--checkout', '--section', "User#{slot}"]).returns("Username                                      \n")
       end
@@ -289,7 +308,7 @@ describe Puppet::Type.type(:ipmi_user).provider(:freeipmi) do
     end
 
     it 'purges duplicate slots' do
-      provider.expects(:bmcconfig_exec).with(['--checkout']).returns(<<~CHECKOUT).at_least_once
+      provider.expects(:bmcconfig_exec).with(['--checkout'], failonfail: true).returns(<<~CHECKOUT).at_least_once
         Section User1
         EndSection
         Section User2
@@ -304,12 +323,12 @@ describe Puppet::Type.type(:ipmi_user).provider(:freeipmi) do
       provider.expects(:bmcconfig_exec).with(['--checkout', '--section', 'User1']).returns('')
       provider.expects(:bmcconfig_exec).with(['--checkout', '--section', 'User2']).returns("Username                                      NEWUSER\n")
       provider.expects(:bmcconfig_exec).with(['--checkout', '--section', 'User3']).returns('')
-      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User2:Username=DISABLED_2'], failonfail: true)
-      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User2:Enable_User=No'], failonfail: true)
-      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User2:Lan_Privilege_Limit=No_Access'], failonfail: true)
-      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User2:Lan_Enable_IPMI_Msgs=No'], failonfail: true)
-      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User2:Lan_Enable_Link_Auth=No'], failonfail: true)
-      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User2:SOL_Payload_Access=No'], failonfail: true)
+      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User2:Username=DISABLED_2'], failonfail: true, sensitive: false)
+      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User2:Enable_User=No'], failonfail: true, sensitive: false)
+      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User2:Lan_Privilege_Limit=No_Access'], failonfail: true, sensitive: false)
+      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User2:Lan_Enable_IPMI_Msgs=No'], failonfail: true, sensitive: false)
+      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User2:Lan_Enable_Link_Auth=No'], failonfail: true, sensitive: false)
+      provider.expects(:bmcconfig_exec).with(['--commit', '--key-pair', 'User2:SOL_Payload_Access=No'], failonfail: true, sensitive: false)
 
       provider.purge_id_mismatch = :true
     end

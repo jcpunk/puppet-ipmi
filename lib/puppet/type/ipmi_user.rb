@@ -101,7 +101,7 @@ Puppet::Type.newtype(:ipmi_user) do
     end
   end
 
-  newproperty(:password) do
+  newproperty(:password, sensitive: true) do
     desc 'Password for the IPMI user. May be a Sensitive value. Required when enable is true.'
 
     def insync?(_is)

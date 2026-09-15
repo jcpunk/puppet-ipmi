@@ -9,6 +9,8 @@ describe Puppet::Type.type(:ipmi_snmp).provider(:freeipmi) do
     File.read('spec/fixtures/unit/puppet/provider/ipmi_snmp/pef_config_community.txt')
   end
 
+  it_behaves_like 'command-confined provider', :pefconfig
+
   def resource_for(params)
     type.new({ name: 'test', provider: 'freeipmi' }.merge(params))
   end

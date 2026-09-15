@@ -10,7 +10,6 @@ Puppet::Type.type(:ipmi_snmp).provide(
   desc 'Manage BMC SNMP community string via freeipmi (ipmi-pef-config)'
 
   commands pefconfig: 'ipmi-pef-config'
-  confine commands: { pefconfig: 'ipmi-pef-config' }
 
   def pefconfig_cmd
     @resource[:pefconfig_cmd] || '/usr/sbin/ipmi-pef-config'

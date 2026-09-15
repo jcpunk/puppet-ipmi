@@ -9,7 +9,7 @@ Puppet::Type.type(:ipmi_network).provide(
 ) do
   desc 'Manage BMC network configuration via freeipmi (bmc-config)'
 
-  confine commands: { bmcconfig: 'bmc-config' }
+  commands bmcconfig: 'bmc-config'
 
   # ---------------------------------------------------------------------------
   # Properties

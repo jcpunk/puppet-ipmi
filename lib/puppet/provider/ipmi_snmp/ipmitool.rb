@@ -9,7 +9,7 @@ Puppet::Type.type(:ipmi_snmp).provide(
 ) do
   desc 'Manage BMC SNMP community string via ipmitool'
 
-  confine commands: { ipmitool: 'ipmitool' }
+  commands ipmitool: 'ipmitool'
   defaultfor kernel: 'Linux'
 
   # ---------------------------------------------------------------------------

@@ -19,7 +19,7 @@ class Puppet::Provider::Ipmi::Ipmitool < Puppet::Provider::Ipmi
   # @return [Puppet::Util::Execution::ProcessOutput]
   def ipmitool_exec(argv, failonfail: false, sensitive: false, stdin: nil)
     cmd = [ipmitool_cmd] + Array(argv)
-    options = { failonfail: failonfail }
+    options = { failonfail: failonfail, combine: true }
     options[:sensitive] = true if sensitive
     options[:stdin] = stdin if stdin
     Puppet::Util::Execution.execute(cmd, options)
@@ -41,7 +41,7 @@ class Puppet::Provider::Ipmi::Ipmitool < Puppet::Provider::Ipmi
   def parse_user_list
     return @parse_user_list if defined?(@parse_user_list)
 
-    output = ipmitool_exec(['user', 'list', channel.to_s])
+    output = ipmitool_exec(['user', 'list', channel.to_s], failonfail: true)
     users = []
     return @parse_user_list = users if output.nil? || output.empty?
 

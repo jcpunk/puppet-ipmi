@@ -27,6 +27,8 @@ describe Puppet::Type.type(:ipmi_user).provider(:ipmitool) do
     Puppet::Provider::Ipmi.reset_auto_allocated_user_ids!
   end
 
+  it_behaves_like 'command-confined provider', :ipmitool
+
   def resource_for(user_id)
     type.new(base_params.merge(user_id: user_id))
   end
@@ -46,13 +48,13 @@ describe Puppet::Type.type(:ipmi_user).provider(:ipmitool) do
       slam_resource = type.new(base_params.merge(user: 'SLAM', user_id: 'auto'))
       slam_provider = slam_resource.provider
 
-      slam_provider.expects(:ipmitool_exec).with(%w[user list 1]).returns(asus_list)
+      slam_provider.expects(:ipmitool_exec).with(%w[user list 1], failonfail: true).returns(asus_list)
 
       expect(slam_provider.resolved_user_id).to eq(4)
     end
 
     it 'selects the lowest free slot, skipping id 1' do
-      provider.expects(:ipmitool_exec).with(%w[user list 1]).returns(supermicro_list)
+      provider.expects(:ipmitool_exec).with(%w[user list 1], failonfail: true).returns(supermicro_list)
 
       expect(provider.resolved_user_id).to eq(3)
     end
@@ -60,15 +62,25 @@ describe Puppet::Type.type(:ipmi_user).provider(:ipmitool) do
     it 'treats DISABLED_* slots as free' do
       disabled_list = asus_list.gsub('Administrator', 'DISABLED_5')
 
-      provider.expects(:ipmitool_exec).with(%w[user list 1]).returns(disabled_list)
+      provider.expects(:ipmitool_exec).with(%w[user list 1], failonfail: true).returns(disabled_list)
 
       expect(provider.resolved_user_id).to eq(5)
     end
 
     it 'falls back to a maximum of 15 when the user list is empty' do
-      provider.expects(:ipmitool_exec).with(%w[user list 1]).returns('')
+      provider.expects(:ipmitool_exec).with(%w[user list 1], failonfail: true).returns('')
 
       expect(provider.resolved_user_id).to eq(2)
+    end
+
+    it 'never resolves auto to slot 1, even when slot 1 holds the requested name' do
+      list = "ID  Name             Callin  Link Auth  IPMI Msg   Channel Priv Limit\n" \
+             "1   NEWUSER          true    true       true       ADMINISTRATOR\n" \
+             "2   ADMIN            true    true       true       ADMINISTRATOR\n" \
+             "3                    true    false      false      Unknown (0x00)\n"
+      provider.expects(:ipmitool_exec).with(%w[user list 1], failonfail: true).returns(list)
+
+      expect(provider.resolved_user_id).to eq(3)
     end
 
     it 'raises when no free slot is available' do
@@ -77,9 +89,16 @@ describe Puppet::Type.type(:ipmi_user).provider(:ipmitool) do
         full_list += "#{id}   user#{id}            true    true       true       ADMINISTRATOR\n"
       end
 
-      provider.expects(:ipmitool_exec).with(%w[user list 1]).returns(full_list)
+      provider.expects(:ipmitool_exec).with(%w[user list 1], failonfail: true).returns(full_list)
 
       expect { provider.resolved_user_id }.to raise_error(Puppet::Error, %r{No free IPMI user slot})
+    end
+
+    it 'raises when the user list command fails' do
+      result = Puppet::Util::Execution::ProcessOutput.new('Unable to establish LAN session', 1)
+      provider.expects(:ipmitool_exec).with(%w[user list 1], failonfail: true).raises(Puppet::ExecutionFailure, result)
+
+      expect { provider.resolved_user_id }.to raise_error(Puppet::ExecutionFailure)
     end
 
     it 'allocates distinct ids for multiple auto resources' do
@@ -88,8 +107,8 @@ describe Puppet::Type.type(:ipmi_user).provider(:ipmitool) do
       provider_a = resource_a.provider
       provider_b = resource_b.provider
 
-      provider_a.expects(:ipmitool_exec).with(%w[user list 1]).returns(supermicro_list)
-      provider_b.expects(:ipmitool_exec).with(%w[user list 1]).returns(supermicro_list)
+      provider_a.expects(:ipmitool_exec).with(%w[user list 1], failonfail: true).returns(supermicro_list)
+      provider_b.expects(:ipmitool_exec).with(%w[user list 1], failonfail: true).returns(supermicro_list)
 
       id_a = provider_a.resolved_user_id
       id_b = provider_b.resolved_user_id
@@ -103,14 +122,14 @@ describe Puppet::Type.type(:ipmi_user).provider(:ipmitool) do
     let(:provider) { resource_for(4).provider }
 
     it 'returns the current username from the BMC' do
-      provider.expects(:ipmitool_exec).with(%w[user list 1]).returns(asus_list)
+      provider.expects(:ipmitool_exec).with(%w[user list 1], failonfail: true).returns(asus_list)
 
       expect(provider.user).to eq('SLAM')
     end
 
     it 'returns an empty string when the slot is empty' do
       provider_empty = resource_for(3).provider
-      provider_empty.expects(:ipmitool_exec).with(%w[user list 1]).returns(supermicro_list)
+      provider_empty.expects(:ipmitool_exec).with(%w[user list 1], failonfail: true).returns(supermicro_list)
 
       expect(provider_empty.user).to eq('')
     end
@@ -174,22 +193,22 @@ describe Puppet::Type.type(:ipmi_user).provider(:ipmitool) do
   describe 'enable property' do
     let(:provider) { resource_for(4).provider }
 
-    it 'is false when the slot is empty' do
-      provider_empty = resource_for(3).provider
-      provider_empty.expects(:ipmitool_exec).with(%w[user list 1]).returns(supermicro_list)
-
-      expect(provider_empty.enable).to eq(:false)
-    end
-
     it 'is false when privilege is NO ACCESS' do
       list = asus_list.gsub('ADMINISTRATOR', 'NO ACCESS')
-      provider.expects(:ipmitool_exec).with(%w[user list 1]).returns(list)
+      provider.expects(:ipmitool_exec).with(%w[user list 1], failonfail: true).returns(list)
 
       expect(provider.enable).to eq(:false)
     end
 
+    it 'is false when privilege is Unknown (0x00)' do
+      provider_empty = resource_for(3).provider
+      provider_empty.expects(:ipmitool_exec).with(%w[user list 1], failonfail: true).returns(supermicro_list)
+
+      expect(provider_empty.enable).to eq(:false)
+    end
+
     it 'is true when the slot is enabled' do
-      provider.expects(:ipmitool_exec).with(%w[user list 1]).returns(asus_list)
+      provider.expects(:ipmitool_exec).with(%w[user list 1], failonfail: true).returns(asus_list)
 
       expect(provider.enable).to eq(:true)
     end
@@ -221,7 +240,7 @@ describe Puppet::Type.type(:ipmi_user).provider(:ipmitool) do
     let(:provider) { resource_for(4).provider }
 
     it 'returns the numeric privilege level' do
-      provider.expects(:ipmitool_exec).with(%w[user list 1]).returns(asus_list)
+      provider.expects(:ipmitool_exec).with(%w[user list 1], failonfail: true).returns(asus_list)
 
       expect(provider.priv).to eq(4)
     end
@@ -262,6 +281,37 @@ describe Puppet::Type.type(:ipmi_user).provider(:ipmitool) do
     end
   end
 
+  describe 'when purge_id_mismatch is true' do
+    it 'syncs purge even when enable and priv are already in sync' do
+      state_dir = Dir.mktmpdir
+      Puppet[:statedir] = state_dir
+
+      resource = type.new(
+        name: 'test',
+        user: 'NEWUSER',
+        user_id: 4,
+        channel: 1,
+        password: 'secret',
+        enable: :true,
+        priv: 4,
+        purge_id_mismatch: :true,
+        provider: 'ipmitool',
+      )
+      catalog = Puppet::Resource::Catalog.new
+      catalog.add_resource(resource)
+      resource.provider.stubs(:priv).returns(4)
+      resource.provider.stubs(:enable).returns(:true)
+      resource.provider.stubs(:user).returns('NEWUSER')
+      resource.provider.stubs(:password_insync?).returns(true)
+      resource.provider.expects(:purge_id_mismatch).returns(:false)
+      resource.provider.expects(:purge_id_mismatch=)
+
+      catalog.apply
+    ensure
+      FileUtils.rm_rf(state_dir)
+    end
+  end
+
   describe 'purge_id_mismatch property' do
     let(:provider) { resource_for(4).provider }
 
@@ -274,13 +324,13 @@ describe Puppet::Type.type(:ipmi_user).provider(:ipmitool) do
         4   NEWUSER          true    true       true       ADMINISTRATOR
       LIST
 
-      provider.expects(:ipmitool_exec).with(%w[user list 1]).returns(duplicate_list)
+      provider.expects(:ipmitool_exec).with(%w[user list 1], failonfail: true).returns(duplicate_list)
 
       expect(provider.purge_id_mismatch).to eq(:false)
     end
 
     it 'returns :true when no duplicate username exists' do
-      provider.expects(:ipmitool_exec).with(%w[user list 1]).returns(supermicro_list)
+      provider.expects(:ipmitool_exec).with(%w[user list 1], failonfail: true).returns(supermicro_list)
 
       expect(provider.purge_id_mismatch).to eq(:true)
     end
@@ -294,7 +344,7 @@ describe Puppet::Type.type(:ipmi_user).provider(:ipmitool) do
         4   NEWUSER          true    true       true       ADMINISTRATOR
       LIST
 
-      provider.expects(:ipmitool_exec).with(%w[user list 1]).returns(duplicate_list).at_least_once
+      provider.expects(:ipmitool_exec).with(%w[user list 1], failonfail: true).returns(duplicate_list).at_least_once
       provider.expects(:ipmitool_exec).with(%w[user set name 2 DISABLED_2], failonfail: true)
       provider.expects(:ipmitool_exec).with(%w[user disable 2], failonfail: true)
       provider.expects(:ipmitool_exec)

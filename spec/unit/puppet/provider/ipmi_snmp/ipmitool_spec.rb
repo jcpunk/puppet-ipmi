@@ -9,6 +9,8 @@ describe Puppet::Type.type(:ipmi_snmp).provider(:ipmitool) do
     File.read('spec/fixtures/unit/puppet/provider/ipmi_network/ipmitool_lan_print.txt')
   end
 
+  it_behaves_like 'command-confined provider', :ipmitool
+
   def resource_for(params)
     type.new({ name: 'test', provider: 'ipmitool' }.merge(params))
   end
