@@ -250,22 +250,19 @@ describe 'ipmi', type: :class do
         end
       end
 
-      context 'with defines' do
+      context 'with native resources' do
         let(:params) do
           {
             users: { newuser: { user: 'newuser', password: 'password' } },
             networks: { dhcp: {} },
-            snmps: { snmp1: { snmp: 'secret', lan_channel: 1 } }
+            snmps: { snmp1: { community: 'secret', lan_channel: 1 } }
           }
         end
 
         it { is_expected.to compile.with_all_deps }
-        it { is_expected.to contain_ipmi__user('newuser') }
-        it { is_expected.to contain_ipmi__network('dhcp') }
-        it { is_expected.to contain_ipmi__snmp('snmp1') }
-        it { is_expected.to contain_ipmi_user('ipmi_user_newuser') }
-        it { is_expected.to contain_ipmi_network('ipmi_network_1') }
-        it { is_expected.to contain_ipmi_snmp('ipmi_snmp_1') }
+        it { is_expected.to contain_ipmi_user('newuser') }
+        it { is_expected.to contain_ipmi_network('dhcp') }
+        it { is_expected.to contain_ipmi_snmp('snmp1') }
       end
     end
   end

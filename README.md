@@ -47,7 +47,7 @@ See [REFERENCE](REFERENCE.md)
 Create a user with admin privileges (default):
 
 ```puppet
-  ipmi::user { 'newuser1':
+  ipmi_user { 'newuser1':
     user     => 'newuser1',
     password => 'password1',
     user_id  => 4,
@@ -57,7 +57,7 @@ Create a user with admin privileges (default):
 Create a user with operator privileges:
 
 ```puppet
-  ipmi::user { 'newuser2':
+  ipmi_user { 'newuser2':
     user     => 'newuser2',
     password => 'password2',
     priv     => 3,
@@ -68,7 +68,7 @@ Create a user with operator privileges:
 Create a user with user privileges on a specific channel:
 
 ```puppet
-  ipmi::user { 'newuser3':
+  ipmi_user { 'newuser3':
     user     => 'newuser3',
     password => 'password3',
     priv     => 2,
@@ -79,7 +79,7 @@ Create a user with user privileges on a specific channel:
 
 Create a user and remove any instance with the wrong `user_id`:
 ```puppet
-  ipmi::user { 'newuser1':
+  ipmi_user { 'newuser1':
     user     => 'newuser1',
     password => 'password1',
     user_id  => 4,
@@ -91,7 +91,7 @@ Create a user and remove any instance with the wrong `user_id`:
 Configure a static ip on IPMI lan channel 1:
 
 ```puppet
-  ipmi::network { 'lan1':
+  ipmi_network { 'lan1':
     type        => 'static',
     ip          => '192.168.1.10',
     netmask     => '255.255.255.0',
@@ -102,16 +102,30 @@ Configure a static ip on IPMI lan channel 1:
 Configure IPMI lan channel 1 to DHCP:
 
 ```puppet
-  ipmi::network { 'dhcp': }
+  ipmi_network { 'dhcp': }
 ```
 
 Configure IPMI snmp string on lan channel 1:
 
 ```puppet
- ipmi::snmp { 'lan1':
-   snmp        => 'secret',
-   lan_channel => 1,
- }
+  ipmi_snmp { 'lan1':
+    community   => 'secret',
+    lan_channel => 1,
+  }
+```
+
+### Backend selection
+
+Both `ipmitool` and `freeipmi` providers are supported. On Linux,
+`ipmitool` is the default when both are installed. To force a specific
+backend, set the provider on the resource:
+
+```puppet
+  ipmi_user { 'newuser1':
+    user     => 'newuser1',
+    password => 'password1',
+    provider => 'freeipmi',
+  }
 ```
 
 ### Classes
@@ -127,38 +141,44 @@ Configure IPMI snmp string on lan channel 1:
   }
 ```
 
-### Defined Resources
+When `users`, `networks`, or `snmps` are passed as class parameters, the
+`ipmi` class declares the corresponding native resources and injects the
+`default_channel` value for any resource that does not specify a channel.
 
-#### `ipmi::user`
+### Native Resources
+
+The public API consists of the native Puppet types `ipmi_user`,
+`ipmi_network`, and `ipmi_snmp`. The previous wrapper defined types
+(`ipmi::user`, `ipmi::network`, `ipmi::snmp`) have been removed.
+
+#### `ipmi_user`
 
 ```puppet
   # defaults
-  ipmi::user { 'newuser':
+  ipmi_user { 'newuser':
     user     => 'root',
     priv     => 4,           # Administrator
     user_id  => 3,
+    channel  => 1,
   }
 ```
 
-#### `ipmi::network`
+#### `ipmi_network`
 
 ```puppet
   # defaults
-  ipmi::network { 'lan1':
+  ipmi_network { 'lan1':
     type        => 'dhcp',
-    ip          => '0.0.0.0',
-    netmask     => '255.255.255.0',
-    gateway     => '0.0.0.0',
     lan_channel => 1,
   }
 ```
 
-#### `ipmi::snmp`
+#### `ipmi_snmp`
 
 ```puppet
   # defaults
-  ipmi::snmp { 'lan1':
-    snmp        => 'public',
+  ipmi_snmp { 'lan1':
+    community   => 'public',
     lan_channel => 1,
   }
 ```
