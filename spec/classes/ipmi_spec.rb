@@ -47,6 +47,11 @@ describe 'ipmi', type: :class do
       context 'with no params' do
         it_behaves_like 'installs packages', facts
 
+        it { is_expected.to contain_class('ipmi::install') }
+        it { is_expected.to contain_class('ipmi::config') }
+        it { is_expected.to contain_class('ipmi::service::ipmi') }
+        it { is_expected.to contain_class('ipmi::service::ipmievd') }
+
         it do
           is_expected.to contain_augeas('ipmi_watchdog').with(
             context: "/files#{config_file}",
@@ -255,6 +260,12 @@ describe 'ipmi', type: :class do
         end
 
         it { is_expected.to compile.with_all_deps }
+        it { is_expected.to contain_ipmi__user('newuser') }
+        it { is_expected.to contain_ipmi__network('dhcp') }
+        it { is_expected.to contain_ipmi__snmp('snmp1') }
+        it { is_expected.to contain_ipmi_user('ipmi_user_newuser') }
+        it { is_expected.to contain_ipmi_network('ipmi_network_1') }
+        it { is_expected.to contain_ipmi_snmp('ipmi_snmp_1') }
       end
     end
   end
