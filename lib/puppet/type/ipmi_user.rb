@@ -1,0 +1,274 @@
+# frozen_string_literal: true
+
+require File.join(File.dirname(__FILE__), '..', 'util', 'ipmi_lan_channel')
+
+Puppet::Type.newtype(:ipmi_user) do
+  @doc = <<-DOC
+    @summary
+      Manages BMC user accounts via IPMI.
+
+    Supports both ipmitool and freeipmi backends.  Manages user name,
+    password, privilege level, enabled state, SOL access, and channel
+    access in an idempotent fashion.
+
+    The resource title is used as the IPMI username unless the `username`
+    property is given explicitly.  `user_id` defaults to `'auto'`, which
+    lets the provider select a slot.
+
+    @example Create an admin user
+      ipmi_user { 'admin':
+        password => Sensitive('s3cret'),
+        priv     => 4,
+        channel  => 1,
+        enable   => true,
+      }
+
+    @example Disable a user
+      ipmi_user { 'old_user':
+        user_id  => 5,
+        channel  => 1,
+        enable   => false,
+      }
+
+    @example Reserve a user ID with a name but no access
+      ipmi_user { 'reserved_operator':
+        username => 'OPERATOR',
+        user_id  => 5,
+        channel  => 1,
+        enable   => false,
+      }
+
+    @example Automatically select a user ID
+      ipmi_user { 'auto_user':
+        password => Sensitive('s3cret'),
+        priv     => 4,
+        channel  => 1,
+      }
+
+    @example Use a different resource title than username
+      ipmi_user { 'admin_account':
+        username => 'admin',
+        password => Sensitive('s3cret'),
+        user_id  => 3,
+        priv     => 4,
+        channel  => 1,
+      }
+  DOC
+
+  ensurable do
+    desc <<-DESC
+      Whether the user exists.  IPMI cannot delete a user slot, so `absent`
+      first removes channel and SOL access (only while the account is still
+      enabled, because BMCs do not allow permission changes on a disabled
+      account) and then renames the slot to `DISABLED_<id>`; the slot is then
+      treated as free.
+    DESC
+    defaultto :present
+
+    newvalue(:present) { provider.create }
+    newvalue(:absent) { provider.destroy }
+  end
+
+  newparam(:name, namevar: true) do
+    desc 'Resource title.  Used as the IPMI username when `username` is not set.'
+  end
+
+  newparam(:user_id) do
+    desc <<-DESC
+      The numeric IPMI user slot ID, or 'auto' to let the provider select one.
+
+      With 'auto' the slot is chosen from the BMC's current user table and
+      the whole catalog, so it does not depend on resource evaluation order:
+      explicit `user_id` values are reserved first, a user that already holds
+      a slot keeps it (lowest id if several), and remaining 'auto' resources
+      take the lowest free slots in title order.  A slot is free when its id
+      is 2 or more and its name is empty or `DISABLED_*`.  ID 1 is the
+      anonymous slot and is never allocated.  A resource that finds no free
+      slot fails on its own; the others still apply.
+
+      On SuperMicro IPMI, user id 2 is reserved for the ADMIN username.
+      On ASUS IPMI, user id 2 is reserved for the admin username.
+    DESC
+    defaultto 'auto'
+    validate do |value|
+      str = value.to_s
+      raise Puppet::Error, 'user_id must be a positive integer or "auto"' unless str == 'auto' || (str =~ %r{^\d+$} && value.to_i.positive?)
+    end
+    munge do |value|
+      (value.to_s == 'auto') ? :auto : value.to_i
+    end
+  end
+
+  newparam(:channel) do
+    desc <<-DESC
+      The IPMI channel number for user access configuration.
+
+      Defaults to the ipmi.default.channel fact, or 1 when unavailable.
+      Note that `defaultto` values are resolved when the resource is
+      instantiated: under a compiler (Puppet Server) that happens on the
+      server, so the fact-based default reflects the *server's* facts, not
+      the node's.  Under `puppet apply` and `puppet resource` it resolves on
+      the node as expected.  Set `channel` explicitly (or via
+      `ipmi::default_channel`) when running agent/server and the BMC's LAN
+      channel is not 1.
+    DESC
+    defaultto do
+      Puppet::Util::IpmiLanChannel.default_channel(nil)
+    end
+    validate do |value|
+      unless value.to_s =~ %r{^[1-9]$|^1[0-5]$}
+        raise Puppet::Error, 'channel must be an integer between 1 and 15'
+      end
+    end
+    munge(&:to_i)
+  end
+
+  newparam(:username) do
+    desc 'The IPMI username.  Defaults to the resource title.'
+    defaultto do
+      @resource[:name]
+    end
+    validate do |value|
+      str = value.to_s
+      raise Puppet::Error, 'username must be a non-empty string' if str.empty?
+      raise Puppet::Error, 'username must be 16 characters or fewer' if str.length > 16
+      raise Puppet::Error, 'username must not contain whitespace' if str =~ %r{\s}
+    end
+  end
+
+  newproperty(:password) do
+    desc 'Password for the IPMI user. May be a Sensitive value. Required when enable is true.'
+
+    sensitive true
+
+    def insync?(_is)
+      return true if should.nil?
+
+      @resource.provider.password_insync?
+    end
+  end
+
+  newproperty(:priv) do
+    desc <<-DESC
+      Privilege level for the user:
+        4 - ADMINISTRATOR
+        3 - OPERATOR
+        2 - USER
+        1 - CALLBACK
+    DESC
+    munge(&:to_i)
+    defaultto 4
+
+    def insync?(is)
+      # When disabling, privilege gets set to NO ACCESS (0xF / 15)
+      # so we skip the priv check when enable is false
+      return true if @resource[:enable] == :false
+
+      is.to_i == should.to_i
+    end
+  end
+
+  newproperty(:enable) do
+    desc 'Whether this user account should be enabled or disabled.'
+    newvalues(:true, :false)
+    defaultto :true
+
+    # Disabling is only complete once the slot has NO ACCESS, which the
+    # enabled flag alone does not tell us.
+    def insync?(is)
+      return provider.access_revoked? if [should].flatten.include?(:false)
+
+      super
+    end
+  end
+
+  newparam(:purge_duplicates, boolean: true, parent: Puppet::Parameter::Boolean) do
+    desc <<-DESC
+      Also remove other slots that hold this username.
+
+      A user normally lives in one slot.  When the same username appears in
+      another slot (for example after the slot changed from one `user_id` to
+      another) the extra slot is blanked and disabled.  Each duplicate is
+      reported as its own generated `ipmi_user` resource with
+      `ensure => absent`, applied before this resource, so it honours
+      `--noop` and is idempotent.
+
+      Slots managed by other resources in the catalog, and the anonymous
+      slot 1, are never purged.
+    DESC
+    defaultto false
+  end
+
+  # Validate the resource parameters
+  validate do
+    # Absent resources never reach the provider, so their other parameters
+    # are not meaningful; skip validation entirely for them.
+    return if self[:ensure] == :absent
+
+    # priv range is validated for every present resource, even a disabled
+    # one: an out-of-range value is never meaningful, and catching it here
+    # prevents it from silently reaching the provider.
+    priv = self[:priv]
+    raise Puppet::Error, "priv must be 1 (CALLBACK), 2 (USER), 3 (OPERATOR), or 4 (ADMINISTRATOR), got #{priv}" unless [1, 2, 3, 4].include?(priv)
+
+    return unless self[:enable] == :true
+
+    pw = self[:password]
+    # Unwrap Sensitive first so emptiness is checked on the real value;
+    # a Sensitive wrapper itself does not reliably respond to empty?.
+    real_pw = pw.is_a?(Puppet::Pops::Types::PSensitiveType::Sensitive) ? pw.unwrap : pw
+    raise Puppet::Error, "You must supply a password to enable #{self[:username]} with ipmi_user" if real_pw.nil? || (real_pw.respond_to?(:empty?) && real_pw.empty?)
+    raise Puppet::Error, 'IPMI v2 restricts passwords to 20 or fewer characters' if real_pw.length > 20
+  end
+
+  # Purge duplicates before this resource runs: some BMCs refuse to give a
+  # name to a slot while another slot still holds it.
+  def depthfirst?
+    true
+  end
+
+  # Emit one `ensure => absent` resource per duplicate slot.
+  def generate
+    return [] unless self[:purge_duplicates] && self[:ensure] == :present
+
+    peers = [self]
+    peers = catalog.resources.select { |r| r.is_a?(self.class) && r[:channel] == self[:channel] } if catalog
+    provider.class.stray_slots(self, peers).map do |entry|
+      self.class.new(
+        name: "#{self[:name]} (duplicate in slot #{entry[:id]})",
+        ensure: :absent,
+        username: self[:username],
+        user_id: entry[:id],
+        channel: self[:channel],
+        provider: self[:provider],
+      )
+    end
+  end
+
+  # Reject catalogs where two live resources claim the same username or the
+  # same explicit slot on one channel.  Free-form titles make this easy to do
+  # by accident, and the resources would otherwise fight over the slot on
+  # every run.  Resources with `ensure => absent` are exempt.
+  def pre_run_check
+    return unless catalog
+    return if self[:ensure] == :absent
+
+    peers = catalog.resources.select do |r|
+      r.is_a?(self.class) && r.name != name && r[:ensure] != :absent && r[:channel] == self[:channel]
+    end
+
+    same_name = peers.select { |r| r[:username] == self[:username] }
+    unless same_name.empty?
+      names = ([self] + same_name).map(&:name).sort.join(', ')
+      raise Puppet::Error, "Multiple ipmi_user resources manage username #{self[:username]} on channel #{self[:channel]}: #{names}"
+    end
+
+    return if self[:user_id] == :auto
+
+    same_slot = peers.select { |r| r[:user_id] == self[:user_id] }
+    return if same_slot.empty?
+
+    names = ([self] + same_slot).map(&:name).sort.join(', ')
+    raise Puppet::Error, "Multiple ipmi_user resources claim user_id #{self[:user_id]} on channel #{self[:channel]}: #{names}"
+  end
+end
