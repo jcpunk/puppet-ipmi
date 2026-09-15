@@ -76,6 +76,8 @@ Puppet::Type.type(:ipmi_user).provide(
   #
   # @return [Boolean]
   def password_insync?
+    return true if @resource[:enable] == :false
+
     pw = real_password
     return true if pw.nil? || pw.empty?
 
@@ -94,6 +96,8 @@ Puppet::Type.type(:ipmi_user).provide(
   # @param _val [String] ignored; password is read from the resource
   # @return [void]
   def password=(_val)
+    return if @resource[:enable] == :false
+
     pw = real_password
     return if pw.nil? || pw.empty?
 

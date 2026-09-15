@@ -119,6 +119,8 @@ Puppet::Type.type(:ipmi_user).provide(
   #
   # @return [Boolean]
   def password_insync?
+    return true if @resource[:enable] == :false
+
     pw = real_password
     return true if pw.nil? || pw.empty?
 
@@ -138,6 +140,8 @@ Puppet::Type.type(:ipmi_user).provide(
   # @param _val [String] ignored; password is read from the resource
   # @return [void]
   def password=(_val)
+    return if @resource[:enable] == :false
+
     pw = real_password
     return unless pw && !pw.empty?
 
@@ -153,8 +157,12 @@ Puppet::Type.type(:ipmi_user).provide(
 
     val = bmc_config_get(user_section, 'Enable_User')
     return :false if val.nil?
+    return :false unless val =~ %r{^Yes$}i
 
-    (val =~ %r{^Yes$}i) ? :true : :false
+    priv_val = bmc_config_get(user_section, 'Lan_Privilege_Limit')
+    return :false if priv_val && priv_val =~ %r{No_Access}i
+
+    :true
   end
 
   # @param val [Symbol] :true to enable, :false to disable

@@ -197,6 +197,20 @@ describe Puppet::Type.type(:ipmi_user).provider(:ipmitool) do
       provider.password = 's' * 17
     end
 
+    it 'does not set the password when enable is false' do
+      provider.resource[:enable] = :false
+      provider.expects(:ipmitool_exec).never
+
+      provider.password = 'secret'
+    end
+
+    it 'reports the password as in sync when enable is false' do
+      provider.resource[:enable] = :false
+      provider.expects(:ipmitool_exec).never
+
+      expect(provider.password_insync?).to be(true)
+    end
+
     it 'unwraps Sensitive passwords' do
       provider.resource[:password] = Puppet::Pops::Types::PSensitiveType::Sensitive.new('secret')
       provider.expects(:ipmitool_exec)

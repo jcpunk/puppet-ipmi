@@ -194,12 +194,36 @@ describe Puppet::Type.type(:ipmi_user).provider(:freeipmi) do
       provider.password = 'secret'
     end
 
+    it 'sets a 20-character password' do
+      long_pw = 's' * 20
+      provider.resource[:password] = long_pw
+      provider.expects(:bmcconfig_exec)
+              .with(['--commit', '--key-pair', "User4:Password=#{long_pw}"], sensitive: true)
+
+      provider.password = long_pw
+    end
+
+    it 'does not set the password when enable is false' do
+      provider.resource[:enable] = :false
+      provider.expects(:bmcconfig_exec).never
+
+      provider.password = 'secret'
+    end
+
     it 'unwraps Sensitive passwords' do
       provider.resource[:password] = Puppet::Pops::Types::PSensitiveType::Sensitive.new('secret')
       provider.expects(:bmcconfig_exec)
               .with(['--commit', '--key-pair', 'User4:Password=secret'], sensitive: true)
 
       provider.password = 'secret'
+    end
+
+    it 'reports the password as in sync when enable is false' do
+      provider.resource[:enable] = :false
+      provider.expects(:bmcinfo_exec).never
+      provider.expects(:bmcconfig_exec).never
+
+      expect(provider.password_insync?).to be(true)
     end
   end
 
@@ -228,6 +252,16 @@ describe Puppet::Type.type(:ipmi_user).provider(:freeipmi) do
       SECTION
 
       expect(provider.enable).to eq(:true)
+    end
+
+    it 'is false when the privilege limit is No_Access' do
+      provider.expects(:bmcconfig_exec).with(['--checkout', '--section', 'User4']).returns(<<~SECTION)
+        Username                                      NEWUSER
+        Enable_User                                   Yes
+        Lan_Privilege_Limit                           No_Access
+      SECTION
+
+      expect(provider.enable).to eq(:false)
     end
 
     it 'enables a user' do
