@@ -58,8 +58,19 @@ describe Puppet::Type.type(:ipmi_network) do
     end
 
     it 'accepts valid IP addresses' do
-      resource = described_class.new(name: 'test', ip: '192.168.1.1')
+      resource = described_class.new(name: 'test', type: 'static', ip: '192.168.1.1', netmask: '255.255.255.0', gateway: '192.168.1.0')
       expect(resource[:ip]).to eq('192.168.1.1')
+    end
+
+    it 'accepts valid IP addresses with limited params' do
+      resource = described_class.new(name: 'test', type: 'static' ip: '192.168.1.1')
+      expect(resource[:ip]).to eq('192.168.1.1')
+    end
+
+    it 'complains when you mix parameters' do
+      expect do
+        described_class.new(name: 'test', type: 'dhcp' ip: '192.168.1.1')
+      end.to raise_error(Puppet::Error, %r{cannot be set})
     end
   end
 end

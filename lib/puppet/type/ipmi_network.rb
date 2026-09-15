@@ -1,8 +1,11 @@
 # frozen_string_literal: true
 
 require 'resolv'
+require File.join(File.dirname(__FILE__), '..', 'util', 'ipmi_lan_channel')
 
 Puppet::Type.newtype(:ipmi_network) do
+  include Puppet::Util::IpmiLanChannel
+
   @doc = <<-DOC
     @summary
       Manages BMC network configuration via IPMI.
@@ -12,7 +15,7 @@ Puppet::Type.newtype(:ipmi_network) do
     of that setting.
 
     The lan channel is derived from the title when it is an integer.
-    Otherwise it defaults to 1.
+    Otherwise it defaults to the ipmi.default.channel fact or 1.
 
     @example Configure DHCP on channel 1
       ipmi_network { '1':
@@ -31,26 +34,6 @@ Puppet::Type.newtype(:ipmi_network) do
 
   newparam(:name, namevar: true) do
     desc 'Resource title. When it is an integer, the lan channel is derived automatically.'
-  end
-
-  newparam(:lan_channel) do
-    desc <<-DESC
-      The IPMI LAN channel number to configure.
-      Derived from the title when the title is an integer.
-      Defaults to 1 when unset and not derivable from the title.
-    DESC
-    defaultto do
-      title = resource[:name].to_s
-      if title =~ %r{^\d+$}
-        title.to_i
-      else
-        1
-      end
-    end
-    validate do |value|
-      raise Puppet::Error, 'lan_channel must be a positive integer' unless value.to_s =~ %r{^\d+$}
-    end
-    munge(&:to_i)
   end
 
   newparam(:ipmitool_cmd) do
@@ -72,6 +55,7 @@ Puppet::Type.newtype(:ipmi_network) do
   newproperty(:type) do
     desc 'IP address source: dhcp or static.'
     newvalues(:dhcp, :static)
+    defaultto :dhcp
   end
 
   newproperty(:ip) do
@@ -92,6 +76,14 @@ Puppet::Type.newtype(:ipmi_network) do
     desc 'Default gateway for the BMC (only used when type is static).'
     validate do |value|
       raise Puppet::Error, "Invalid gateway: #{value}" unless value.to_s =~ Resolv::IPv4::Regex
+    end
+  end
+
+  validate do
+    if self[:type] == :dhcp
+      [:ip, :netmask, :gateway].each do |prop|
+        raise Puppet::Error, "#{prop} cannot be set when type is 'dhcp'" if self[prop]
+      end
     end
   end
 end
