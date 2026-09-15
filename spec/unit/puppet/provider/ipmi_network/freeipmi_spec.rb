@@ -46,35 +46,35 @@ describe Puppet::Type.type(:ipmi_network).provider(:freeipmi) do
 
     it 'sets type to dhcp' do
       provider.expects(:bmcconfig_exec)
-              .with(%w[--commit --key-pair Lan_Conf:IP_Address_Source=Use_DHCP --lan-channel-number 1], failonfail: true, sensitive: false)
+              .with(%w[--commit --key-pair Lan_Conf:IP_Address_Source=Use_DHCP --lan-channel-number 1], sensitive: false)
 
       provider.type = :dhcp
     end
 
     it 'sets type to static' do
       provider.expects(:bmcconfig_exec)
-              .with(%w[--commit --key-pair Lan_Conf:IP_Address_Source=Static --lan-channel-number 1], failonfail: true, sensitive: false)
+              .with(%w[--commit --key-pair Lan_Conf:IP_Address_Source=Static --lan-channel-number 1], sensitive: false)
 
       provider.type = :static
     end
 
     it 'sets the ip address' do
       provider.expects(:bmcconfig_exec)
-              .with(%w[--commit --key-pair Lan_Conf:IP_Address=192.168.1.100 --lan-channel-number 1], failonfail: true, sensitive: false)
+              .with(%w[--commit --key-pair Lan_Conf:IP_Address=192.168.1.100 --lan-channel-number 1], sensitive: false)
 
       provider.ip = '192.168.1.100'
     end
 
     it 'sets the netmask' do
       provider.expects(:bmcconfig_exec)
-              .with(%w[--commit --key-pair Lan_Conf:Subnet_Mask=255.255.255.0 --lan-channel-number 1], failonfail: true, sensitive: false)
+              .with(%w[--commit --key-pair Lan_Conf:Subnet_Mask=255.255.255.0 --lan-channel-number 1], sensitive: false)
 
       provider.netmask = '255.255.255.0'
     end
 
     it 'sets the gateway' do
       provider.expects(:bmcconfig_exec)
-              .with(%w[--commit --key-pair Lan_Conf:Default_Gateway_IP_Address=192.168.1.1 --lan-channel-number 1], failonfail: true, sensitive: false)
+              .with(%w[--commit --key-pair Lan_Conf:Default_Gateway_IP_Address=192.168.1.1 --lan-channel-number 1], sensitive: false)
 
       provider.gateway = '192.168.1.1'
     end

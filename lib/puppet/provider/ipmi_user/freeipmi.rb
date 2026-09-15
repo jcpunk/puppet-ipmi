@@ -11,10 +11,14 @@ Puppet::Type.type(:ipmi_user).provide(
 
   commands bmcconfig: 'bmc-config'
 
+  # @return [Hash<Integer, String>] mapping of privilege numbers to bmc-config names
   def freeipmi_priv_map
     { 4 => 'Administrator', 3 => 'Operator', 2 => 'User', 1 => 'Callback' }
   end
 
+  # Resolve the requested user_id, expanding `auto` to a concrete BMC slot.
+  #
+  # @return [Integer]
   def resolved_user_id
     return @resolved_user_id if defined?(@resolved_user_id)
 
@@ -26,15 +30,18 @@ Puppet::Type.type(:ipmi_user).provide(
                         end
   end
 
+  # @return [String] target username from the resource
   def user_name
     @resource[:user]
   end
 
   # Build a list of all BMC user slots from a single bmc-config checkout.
+  #
+  # @return [Array<Hash>] list of user hashes with :id and :name
   def list_all_users
     return @list_all_users if defined?(@list_all_users)
 
-    output = bmcconfig_exec(['--checkout'], failonfail: true)
+    output = bmcconfig_exec(['--checkout'])
     return @list_all_users = [] if output.nil? || output.empty?
 
     section_ids = []
@@ -57,10 +64,14 @@ Puppet::Type.type(:ipmi_user).provide(
     end
   end
 
+  # @return [Integer] highest user slot id reported by the BMC
   def max_user_slot
     list_all_users.map { |u| u[:id] }.max || 15
   end
 
+  # Unwrap the resource password if it is a Sensitive value.
+  #
+  # @return [String, nil]
   def real_password
     pw = @resource[:password]
     return nil if pw.nil?
@@ -68,6 +79,7 @@ Puppet::Type.type(:ipmi_user).provide(
     pw.is_a?(Puppet::Pops::Types::PSensitiveType::Sensitive) ? pw.unwrap : pw.to_s
   end
 
+  # @return [String] bmc-config section name for the resolved user slot
   def user_section
     "User#{resolved_user_id}"
   end
@@ -76,29 +88,52 @@ Puppet::Type.type(:ipmi_user).provide(
   # Properties
   # ---------------------------------------------------------------------------
 
+  # @return [String, nil] current username in the resolved slot
   def user
     bmc_config_get(user_section, 'Username')
   end
 
+  # @param val [String] username to set
+  # @return [void]
   def user=(val)
     bmc_config_set(user_section, 'Username', val.to_s)
   end
 
+  # Passwords cannot be read back from the BMC.
+  #
+  # @return [Symbol] :absent
   def password
     :absent
   end
 
+  # Test the current BMC password against the desired value using bmc-info.
+  #
+  # @return [Boolean]
   def password_insync?
-    # freeipmi does not expose a direct password test command; always apply
-    # the password so rotation is guaranteed.
+    pw = real_password
+    return true if pw.nil? || pw.empty?
+
+    current_priv = priv
+    return false if current_priv.nil?
+
+    priv_level = freeipmi_priv_map[current_priv] || 'User'
+    result = bmcinfo_exec(
+      ['-u', user_name, '-p', pw, '-l', priv_level],
+      sensitive: true,
+    )
+    result.exitstatus.zero?
+  rescue StandardError
     false
   end
 
+  # @param _val [String] ignored; password is read from the resource
+  # @return [void]
   def password=(_val)
     pw = real_password
     bmc_config_set(user_section, 'Password', pw, sensitive: true) if pw && !pw.empty?
   end
 
+  # @return [Symbol] :true if the slot is enabled, :false otherwise
   def enable
     username = bmc_config_get(user_section, 'Username')
     return :false if username.nil? || username.empty?
@@ -110,6 +145,8 @@ Puppet::Type.type(:ipmi_user).provide(
     (val =~ %r{^Yes$}i) ? :true : :false
   end
 
+  # @param val [Symbol] :true to enable, :false to disable
+  # @return [void]
   def enable=(val)
     if [:true, true].include?(val)
       enable_user!
@@ -118,6 +155,7 @@ Puppet::Type.type(:ipmi_user).provide(
     end
   end
 
+  # @return [Integer, nil] numeric privilege level of the slot
   def priv
     val = bmc_config_get(user_section, 'Lan_Privilege_Limit')
     return nil if val.nil?
@@ -125,21 +163,27 @@ Puppet::Type.type(:ipmi_user).provide(
     freeipmi_priv_map.key(val) || 0
   end
 
+  # @param val [Integer] privilege level to set
+  # @return [void]
   def priv=(val)
     priv_name = freeipmi_priv_map[val] || 'Administrator'
     bmc_config_set(user_section, 'Lan_Privilege_Limit', priv_name)
   end
 
+  # @return [Symbol] :true if no mismatched slot exists, :false otherwise
   def purge_id_mismatch
     mismatched_slot_exists? ? :false : :true
   end
 
+  # @param _val [Symbol] ignored; purge is driven by the getter
+  # @return [void]
   def purge_id_mismatch=(_val)
     purge_mismatched_ids!
   end
 
   private
 
+  # @return [Boolean] true if another slot holds the target username
   def mismatched_slot_exists?
     (1..max_user_slot).any? do |slot|
       next if slot == resolved_user_id
@@ -149,8 +193,10 @@ Puppet::Type.type(:ipmi_user).provide(
     end
   end
 
-  # Scan all BMC user slots and disable any slot that holds the target
-  # username at an ID other than resolved_user_id.
+  # Blank and disable any slot (other than resolved_user_id) that holds the
+  # target username.
+  #
+  # @return [void]
   def purge_mismatched_ids!
     (1..max_user_slot).each do |slot|
       next if slot == resolved_user_id
@@ -171,6 +217,10 @@ Puppet::Type.type(:ipmi_user).provide(
     end
   end
 
+  # Enable the resolved slot with the configured username, password, privilege,
+  # and channel access.
+  #
+  # @return [void]
   def enable_user!
     # Set username
     bmc_config_set(user_section, 'Username', user_name)
@@ -197,6 +247,9 @@ Puppet::Type.type(:ipmi_user).provide(
     bmc_config_set(user_section, 'SOL_Payload_Access', 'Yes')
   end
 
+  # Disable the resolved slot by removing privileges and channel access.
+  #
+  # @return [void]
   def disable_user!
     # Disable user
     bmc_config_set(user_section, 'Enable_User', 'No')

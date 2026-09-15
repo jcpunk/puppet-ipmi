@@ -10,14 +10,35 @@ class Puppet::Provider::Ipmi::Freeipmi < Puppet::Provider::Ipmi
     @resource[:bmcconfig_cmd] || '/usr/sbin/bmc-config'
   end
 
+  # @return [String] path to the bmc-info binary
+  def bmcinfo_cmd
+    @resource[:bmcinfo_cmd] || '/usr/sbin/bmc-info'
+  end
+
   # Execute a bmc-config subcommand.
   #
   # @param argv [Array<String>] subcommand and arguments
   # @param failonfail [Boolean] whether to raise on non-zero exit
+  # @param sensitive [Boolean] whether to redact the command in logs
   # @return [Puppet::Util::Execution::ProcessOutput]
-  def bmcconfig_exec(argv, failonfail: false, sensitive: false)
+  def bmcconfig_exec(argv, failonfail: true, sensitive: false)
     cmd = [bmcconfig_cmd] + Array(argv)
     options = { failonfail: failonfail, combine: true }
+    options[:sensitive] = true if sensitive
+    Puppet::Util::Execution.execute(cmd, options)
+  end
+
+  # Execute a read-only bmc-info probe command.
+  #
+  # Always runs with failonfail: false so the caller can inspect the exit
+  # status; use combine: true so stderr diagnostics are available.
+  #
+  # @param argv [Array<String>] subcommand and arguments
+  # @param sensitive [Boolean] whether to redact the command in logs
+  # @return [Puppet::Util::Execution::ProcessOutput]
+  def bmcinfo_exec(argv, sensitive: false)
+    cmd = [bmcinfo_cmd] + Array(argv)
+    options = { failonfail: false, combine: true }
     options[:sensitive] = true if sensitive
     Puppet::Util::Execution.execute(cmd, options)
   end
@@ -55,7 +76,7 @@ class Puppet::Provider::Ipmi::Freeipmi < Puppet::Provider::Ipmi
   def bmc_config_set(section, key, value, channel: nil, sensitive: false)
     argv = ['--commit', '--key-pair', "#{section}:#{key}=#{value}"]
     argv += ['--lan-channel-number', channel.to_s] if channel
-    bmcconfig_exec(argv, failonfail: true, sensitive: sensitive)
+    bmcconfig_exec(argv, sensitive: sensitive)
   end
 
   private

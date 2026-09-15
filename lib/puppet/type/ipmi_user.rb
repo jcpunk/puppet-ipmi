@@ -90,6 +90,14 @@ Puppet::Type.newtype(:ipmi_user) do
     end
   end
 
+  newparam(:bmcinfo_cmd) do
+    desc 'Path to the bmc-info binary (freeipmi only). Used to test passwords without changing state.'
+    defaultto '/usr/sbin/bmc-info'
+    validate do |value|
+      raise Puppet::Error, 'bmcinfo_cmd must be an absolute path' unless value.start_with?('/')
+    end
+  end
+
   newproperty(:user) do
     desc 'The IPMI username to set.'
     defaultto 'root'

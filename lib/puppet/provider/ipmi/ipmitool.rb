@@ -17,7 +17,7 @@ class Puppet::Provider::Ipmi::Ipmitool < Puppet::Provider::Ipmi
   # @param sensitive [Boolean] whether to redact the command in logs
   # @param stdin [String, nil] data to feed on stdin
   # @return [Puppet::Util::Execution::ProcessOutput]
-  def ipmitool_exec(argv, failonfail: false, sensitive: false, stdin: nil)
+  def ipmitool_exec(argv, failonfail: true, sensitive: false, stdin: nil)
     cmd = [ipmitool_cmd] + Array(argv)
     options = { failonfail: failonfail, combine: true }
     options[:sensitive] = true if sensitive
@@ -41,7 +41,7 @@ class Puppet::Provider::Ipmi::Ipmitool < Puppet::Provider::Ipmi
   def parse_user_list
     return @parse_user_list if defined?(@parse_user_list)
 
-    output = ipmitool_exec(['user', 'list', channel.to_s], failonfail: true)
+    output = ipmitool_exec(['user', 'list', channel.to_s])
     users = []
     return @parse_user_list = users if output.nil? || output.empty?
 

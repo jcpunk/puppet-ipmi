@@ -43,31 +43,31 @@ describe Puppet::Type.type(:ipmi_network).provider(:ipmitool) do
     let(:provider) { resource_for(lan_channel: 1).provider }
 
     it 'sets type to dhcp' do
-      provider.expects(:ipmitool_exec).with(%w[lan set 1 ipsrc dhcp], failonfail: true)
+      provider.expects(:ipmitool_exec).with(%w[lan set 1 ipsrc dhcp])
 
       provider.type = :dhcp
     end
 
     it 'sets type to static' do
-      provider.expects(:ipmitool_exec).with(%w[lan set 1 ipsrc static], failonfail: true)
+      provider.expects(:ipmitool_exec).with(%w[lan set 1 ipsrc static])
 
       provider.type = :static
     end
 
     it 'sets the ip address' do
-      provider.expects(:ipmitool_exec).with(%w[lan set 1 ipaddr 192.168.1.100], failonfail: true)
+      provider.expects(:ipmitool_exec).with(%w[lan set 1 ipaddr 192.168.1.100])
 
       provider.ip = '192.168.1.100'
     end
 
     it 'sets the netmask' do
-      provider.expects(:ipmitool_exec).with(%w[lan set 1 netmask 255.255.255.0], failonfail: true)
+      provider.expects(:ipmitool_exec).with(%w[lan set 1 netmask 255.255.255.0])
 
       provider.netmask = '255.255.255.0'
     end
 
     it 'sets the gateway' do
-      provider.expects(:ipmitool_exec).with(%w[lan set 1 defgw ipaddr 192.168.1.1], failonfail: true)
+      provider.expects(:ipmitool_exec).with(%w[lan set 1 defgw ipaddr 192.168.1.1])
 
       provider.gateway = '192.168.1.1'
     end

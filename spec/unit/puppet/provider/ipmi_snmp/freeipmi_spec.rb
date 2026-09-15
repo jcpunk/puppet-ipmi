@@ -28,7 +28,7 @@ describe Puppet::Type.type(:ipmi_snmp).provider(:freeipmi) do
 
     it 'sets the community string' do
       provider.expects(:pefconfig_exec)
-              .with(%w[--commit --key-pair Community_String_Channel_1:Community_String=private], failonfail: true)
+              .with(%w[--commit --key-pair Community_String_Channel_1:Community_String=private])
 
       provider.community = 'private'
     end

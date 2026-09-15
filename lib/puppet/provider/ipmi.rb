@@ -24,6 +24,9 @@ class Puppet::Provider::Ipmi < Puppet::Provider
 
   # Parse colon-separated key-value output (lines like "Key  : Value").
   # Used by any provider that reads structured output in this format.
+  #
+  # @param output [String] command output to parse
+  # @return [Hash<String, String>]
   def parse_colon_kv(output)
     result = {}
     return result if output.nil? || output.empty?

@@ -25,7 +25,7 @@ describe Puppet::Type.type(:ipmi_snmp).provider(:ipmitool) do
     end
 
     it 'sets the community string' do
-      provider.expects(:ipmitool_exec).with(%w[lan set 1 snmp secret], failonfail: true)
+      provider.expects(:ipmitool_exec).with(%w[lan set 1 snmp secret])
 
       provider.community = 'secret'
     end

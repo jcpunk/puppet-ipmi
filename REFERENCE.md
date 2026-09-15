@@ -573,6 +573,7 @@ Default value: `root`
 The following parameters are available in the `ipmi_user` type.
 
 * [`bmcconfig_cmd`](#-ipmi_user--bmcconfig_cmd)
+* [`bmcinfo_cmd`](#-ipmi_user--bmcinfo_cmd)
 * [`channel`](#-ipmi_user--channel)
 * [`ipmitool_cmd`](#-ipmi_user--ipmitool_cmd)
 * [`name`](#-ipmi_user--name)
@@ -584,6 +585,12 @@ The following parameters are available in the `ipmi_user` type.
 Path to the bmc-config binary (freeipmi only).
 
 Default value: `/usr/sbin/bmc-config`
+
+##### <a name="-ipmi_user--bmcinfo_cmd"></a>`bmcinfo_cmd`
+
+Path to the bmc-info binary (freeipmi only). Used to test passwords without changing state.
+
+Default value: `/usr/sbin/bmc-info`
 
 ##### <a name="-ipmi_user--channel"></a>`channel`
 
