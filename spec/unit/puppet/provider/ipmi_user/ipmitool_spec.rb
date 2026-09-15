@@ -118,6 +118,23 @@ describe Puppet::Type.type(:ipmi_user).provider(:ipmitool) do
     end
   end
 
+  describe '#find_user_by_id' do
+    let(:provider) { resource_for(4).provider }
+
+    it 'returns the matching user hash' do
+      provider.expects(:ipmitool_exec).with(%w[user list 1]).returns(asus_list)
+
+      entry = provider.find_user_by_id(4)
+      expect(entry).to eq({ id: 4, name: 'SLAM', privilege: 'ADMINISTRATOR' })
+    end
+
+    it 'returns nil when the id is not present' do
+      provider.expects(:ipmitool_exec).with(%w[user list 1]).returns(supermicro_list)
+
+      expect(provider.find_user_by_id(99)).to be_nil
+    end
+  end
+
   describe 'user property' do
     let(:provider) { resource_for(4).provider }
 
@@ -251,6 +268,50 @@ describe Puppet::Type.type(:ipmi_user).provider(:ipmitool) do
               .with(%w[channel setaccess 1 4 callin=on ipmi=on link=on privilege=3])
 
       provider.priv = 3
+    end
+  end
+
+  describe 'private helpers' do
+    let(:provider) { resource_for(4).provider }
+
+    it '#enable_user! sets name, password, privilege, and enables the slot' do
+      provider.expects(:ipmitool_exec).with(%w[user set name 4 NEWUSER])
+      provider.expects(:ipmitool_exec).with(%w[user set password 4 secret 16], sensitive: true)
+      provider.expects(:ipmitool_exec).with(%w[user priv 4 4 1])
+      provider.expects(:ipmitool_exec).with(%w[user enable 4])
+      provider.expects(:ipmitool_exec).with(%w[sol payload enable 1 4])
+      provider.expects(:ipmitool_exec)
+              .with(%w[channel setaccess 1 4 callin=on ipmi=on link=on privilege=4])
+
+      provider.send(:enable_user!)
+    end
+
+    it '#disable_user! removes privileges and disables the slot' do
+      provider.expects(:ipmitool_exec).with(%w[user priv 4 0xF 1])
+      provider.expects(:ipmitool_exec).with(%w[user disable 4])
+      provider.expects(:ipmitool_exec).with(%w[sol payload disable 1 4])
+      provider.expects(:ipmitool_exec)
+              .with(%w[channel setaccess 1 4 callin=off ipmi=off link=off privilege=15])
+
+      provider.send(:disable_user!)
+    end
+
+    it '#purge_mismatched_ids! blanks and disables duplicate slots' do
+      duplicate_list = <<~LIST
+        ID  Name             Callin  Link Auth  IPMI Msg   Channel Priv Limit
+        1                    true    false      false      Unknown (0x00)
+        2   NEWUSER          true    true       true       ADMINISTRATOR
+        3                    true    false      false      Unknown (0x00)
+        4   NEWUSER          true    true       true       ADMINISTRATOR
+      LIST
+
+      provider.expects(:ipmitool_exec).with(%w[user list 1]).returns(duplicate_list).at_least_once
+      provider.expects(:ipmitool_exec).with(%w[user set name 2 DISABLED_2])
+      provider.expects(:ipmitool_exec).with(%w[user disable 2])
+      provider.expects(:ipmitool_exec)
+              .with(%w[channel setaccess 1 2 callin=off ipmi=off link=off privilege=15])
+
+      provider.send(:purge_mismatched_ids!)
     end
   end
 

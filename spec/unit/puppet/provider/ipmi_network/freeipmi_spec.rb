@@ -41,6 +41,19 @@ describe Puppet::Type.type(:ipmi_network).provider(:freeipmi) do
     end
   end
 
+  describe 'type getter' do
+    let(:provider) { resource_for(lan_channel: 1).provider }
+
+    it 'returns :dhcp when IP_Address_Source is Use_DHCP' do
+      dhcp_conf = lan_conf.gsub('Static', 'Use_DHCP')
+      provider.expects(:bmcconfig_exec)
+              .with(%w[--checkout --section Lan_Conf --lan-channel-number 1])
+              .returns(dhcp_conf)
+
+      expect(provider.type).to eq(:dhcp)
+    end
+  end
+
   describe 'property setters' do
     let(:provider) { resource_for(lan_channel: 1).provider }
 
@@ -77,6 +90,40 @@ describe Puppet::Type.type(:ipmi_network).provider(:freeipmi) do
               .with(%w[--commit --key-pair Lan_Conf:Default_Gateway_IP_Address=192.168.1.1 --lan-channel-number 1], sensitive: false)
 
       provider.gateway = '192.168.1.1'
+    end
+  end
+
+  describe '#bmc_config_get and #bmc_config_set' do
+    let(:provider) { resource_for(lan_channel: 1).provider }
+
+    it 'reads a key from a checked-out section' do
+      provider.expects(:bmcconfig_exec)
+              .with(%w[--checkout --section Lan_Conf --lan-channel-number 1])
+              .returns(lan_conf)
+
+      expect(provider.bmc_config_get('Lan_Conf', 'IP_Address', channel: 1)).to eq('192.168.57.34')
+    end
+
+    it 'returns nil for a missing key' do
+      provider.expects(:bmcconfig_exec)
+              .with(%w[--checkout --section Lan_Conf --lan-channel-number 1])
+              .returns(lan_conf)
+
+      expect(provider.bmc_config_get('Lan_Conf', 'No_Such_Key', channel: 1)).to be_nil
+    end
+
+    it 'commits a key/value pair with an optional channel' do
+      provider.expects(:bmcconfig_exec)
+              .with(%w[--commit --key-pair Lan_Conf:IP_Address=192.168.1.100 --lan-channel-number 1], sensitive: false)
+
+      provider.bmc_config_set('Lan_Conf', 'IP_Address', '192.168.1.100', channel: 1)
+    end
+
+    it 'passes the sensitive flag through' do
+      provider.expects(:bmcconfig_exec)
+              .with(%w[--commit --key-pair Lan_Conf:Secret=hidden], sensitive: true)
+
+      provider.bmc_config_set('Lan_Conf', 'Secret', 'hidden', sensitive: true)
     end
   end
 

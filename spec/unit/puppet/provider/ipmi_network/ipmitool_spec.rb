@@ -39,6 +39,17 @@ describe Puppet::Type.type(:ipmi_network).provider(:ipmitool) do
     end
   end
 
+  describe 'type getter' do
+    let(:provider) { resource_for(lan_channel: 1).provider }
+
+    it 'returns :dhcp when IP Address Source is DHCP' do
+      dhcp_print = lan_print.gsub('Static Address', 'DHCP Address')
+      provider.expects(:ipmitool_exec).with(%w[lan print 1]).returns(dhcp_print)
+
+      expect(provider.type).to eq(:dhcp)
+    end
+  end
+
   describe 'property setters' do
     let(:provider) { resource_for(lan_channel: 1).provider }
 
