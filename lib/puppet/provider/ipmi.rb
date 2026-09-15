@@ -13,13 +13,24 @@ class Puppet::Provider::Ipmi < Puppet::Provider
   # IDs already reserved by `user_id => 'auto'` during this Puppet run.
   # This prevents multiple auto resources from selecting the same slot
   # before earlier resources have actually written to the BMC.
-  AUTO_ALLOCATED_USER_IDS = Set.new
+  @auto_allocated_user_ids = Set.new
 
-  # Clear the set of auto-allocated user IDs. Used by tests.
+  # The allocation state is stored on the base class so it is shared by all
+  # ipmi_user provider subclasses.
+  def self.auto_allocated_user_ids
+    Puppet::Provider::Ipmi.instance_variable_get(:@auto_allocated_user_ids)
+  end
+
+  def self.auto_allocated_user_ids=(value)
+    Puppet::Provider::Ipmi.instance_variable_set(:@auto_allocated_user_ids, value)
+  end
+
+  # Reset the auto-allocation tracking state. Called from ipmi_user prefetch
+  # at the start of each catalog application, and directly by tests.
   #
   # @return [void]
   def self.reset_auto_allocated_user_ids!
-    AUTO_ALLOCATED_USER_IDS.clear
+    Puppet::Provider::Ipmi.instance_variable_set(:@auto_allocated_user_ids, Set.new)
   end
 
   # Parse colon-separated key-value output (lines like "Key  : Value").
@@ -53,12 +64,14 @@ class Puppet::Provider::Ipmi < Puppet::Provider
   # free slot is available, a Puppet::Error is raised.
   #
   # IDs selected during the current Puppet run are recorded in
-  # AUTO_ALLOCATED_USER_IDS so that multiple `auto` resources cannot
+  # auto_allocated_user_ids so that multiple `auto` resources cannot
   # resolve to the same slot before any of them have been applied.
   def resolve_auto_user_id(user_name, users)
+    allocated = self.class.auto_allocated_user_ids
+
     existing = users.find { |u| u[:name] == user_name && u[:id] != 1 }
     if existing
-      AUTO_ALLOCATED_USER_IDS << existing[:id]
+      allocated << existing[:id]
       return existing[:id]
     end
 
@@ -68,12 +81,12 @@ class Puppet::Provider::Ipmi < Puppet::Provider
       u[:id] unless name.empty? || name =~ %r{^DISABLED_}
     end
 
-    used_ids.concat(AUTO_ALLOCATED_USER_IDS.to_a)
+    used_ids.concat(allocated.to_a)
 
     (2..max_id).each do |id|
       next if used_ids.include?(id)
 
-      AUTO_ALLOCATED_USER_IDS << id
+      allocated << id
       return id
     end
 
