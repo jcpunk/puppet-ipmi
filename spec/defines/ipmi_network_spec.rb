@@ -9,8 +9,8 @@ describe 'ipmi::network', type: :define do
         facts.merge(
           {
             ipmitool: { mc_info: { IPMI_Puppet_Service_Recommend: 'running' } },
-            ipmi: { default: { channel: 1 } }
-          }
+            ipmi: { default: { channel: 1 } },
+          },
         )
       end
       let(:title) { 'example' }
@@ -25,9 +25,9 @@ describe 'ipmi::network', type: :define do
         it { is_expected.to compile.with_all_deps }
 
         it {
-          is_expected.to contain_ipmi_network('ipmi_network_example').with(
+          is_expected.to contain_ipmi_network('ipmi_network_1').with(
             lan_channel: 1,
-            type: 'dhcp'
+            type: 'dhcp',
           )
         }
       end
@@ -46,9 +46,9 @@ describe 'ipmi::network', type: :define do
         it { is_expected.to compile.with_all_deps }
 
         it {
-          is_expected.to contain_ipmi_network('ipmi_network_example').with(
+          is_expected.to contain_ipmi_network('ipmi_network_1').with(
             lan_channel: 1,
-            type: 'dhcp'
+            type: 'dhcp',
           )
         }
       end
@@ -66,12 +66,12 @@ describe 'ipmi::network', type: :define do
         it { is_expected.to compile.with_all_deps }
 
         it {
-          is_expected.to contain_ipmi_network('ipmi_network_example').with(
+          is_expected.to contain_ipmi_network('ipmi_network_1').with(
             lan_channel: 1,
             type: 'static',
             ip: '1.1.1.10',
             netmask: '255.255.255.0',
-            gateway: '1.1.1.1'
+            gateway: '1.1.1.1',
           )
         }
       end
@@ -90,12 +90,12 @@ describe 'ipmi::network', type: :define do
         it { is_expected.to compile.with_all_deps }
 
         it {
-          is_expected.to contain_ipmi_network('ipmi_network_example').with(
+          is_expected.to contain_ipmi_network('ipmi_network_2').with(
             lan_channel: 2,
             type: 'static',
             ip: '1.1.1.10',
             netmask: '255.255.255.0',
-            gateway: '1.1.1.1'
+            gateway: '1.1.1.1',
           )
         }
       end

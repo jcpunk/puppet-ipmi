@@ -9,8 +9,8 @@ describe 'ipmi::user', type: :define do
         facts.merge(
           {
             ipmitool: { mc_info: { IPMI_Puppet_Service_Recommend: 'running' } },
-            ipmi: { default: { channel: 1 } }
-          }
+            ipmi: { default: { channel: 1 } },
+          },
         )
       end
       let(:title) { 'newuser' }
@@ -32,7 +32,7 @@ describe 'ipmi::user', type: :define do
             priv: 4,
             channel: 1,
             enable: true,
-            purge_id_mismatch: false
+            purge_id_mismatch: false,
           )
         }
       end
@@ -56,7 +56,7 @@ describe 'ipmi::user', type: :define do
             password: 'password',
             priv: 3,
             channel: 1,
-            enable: true
+            enable: true,
           )
         }
       end
@@ -79,7 +79,7 @@ describe 'ipmi::user', type: :define do
             user_id: 4,
             priv: 3,
             channel: 1,
-            enable: true
+            enable: true,
           )
         }
       end
@@ -101,7 +101,7 @@ describe 'ipmi::user', type: :define do
             user_id: :auto,
             priv: 4,
             channel: 1,
-            enable: true
+            enable: true,
           )
         }
       end
@@ -123,14 +123,14 @@ describe 'ipmi::user', type: :define do
         end
 
         it 'fails and raise invalid privilege error' do
-          expect { is_expected.to contain_ipmi_user('ipmi_user_newuser') }.to raise_error(Puppet::Error, %r{priv must be})
+          expect { is_expected.to contain_ipmi_user('ipmi_user_newuser') }.to raise_error(Puppet::Error, %r{Integer\[1, 4\]})
         end
       end
 
       describe 'when deploying without a password set' do
         let(:params) do
           {
-            enable: true
+            enable: true,
           }
         end
 
@@ -142,7 +142,7 @@ describe 'ipmi::user', type: :define do
       describe 'when disabling a user' do
         let(:params) do
           {
-            enable: false
+            enable: false,
           }
         end
 
@@ -150,7 +150,25 @@ describe 'ipmi::user', type: :define do
 
         it {
           is_expected.to contain_ipmi_user('ipmi_user_newuser').with(
-            enable: false
+            enable: false,
+          )
+        }
+      end
+
+      describe 'when disabling a user with a priv value' do
+        let(:params) do
+          {
+            enable: false,
+            priv: 3,
+          }
+        end
+
+        it { is_expected.to compile.with_all_deps }
+
+        it {
+          is_expected.to contain_ipmi_user('ipmi_user_newuser').with(
+            enable: false,
+            priv: 3,
           )
         }
       end
@@ -168,7 +186,7 @@ describe 'ipmi::user', type: :define do
         it {
           is_expected.to contain_ipmi_user('ipmi_user_newuser').with(
             enable: false,
-            purge_id_mismatch: true
+            purge_id_mismatch: true,
           )
         }
       end
@@ -193,7 +211,7 @@ describe 'ipmi::user', type: :define do
             priv: 3,
             channel: 1,
             enable: true,
-            purge_id_mismatch: true
+            purge_id_mismatch: true,
           )
         }
       end
@@ -217,7 +235,7 @@ describe 'ipmi::user', type: :define do
             user_id: 4,
             priv: 3,
             enable: true,
-            purge_id_mismatch: true
+            purge_id_mismatch: true,
           )
         }
       end

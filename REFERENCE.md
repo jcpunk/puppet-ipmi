@@ -57,11 +57,15 @@ Data type: `Array[String]`
 
 List of packages to install.
 
+Default value: `['openipmi', 'ipmitool']`
+
 ##### <a name="-ipmi--config_file"></a>`config_file`
 
 Data type: `Stdlib::Absolutepath`
 
 Absolute path to the ipmi service config file.
+
+Default value: `'/etc/default/openipmi'`
 
 ##### <a name="-ipmi--service_name"></a>`service_name`
 
@@ -69,11 +73,15 @@ Data type: `String`
 
 Name of IPMI service.
 
+Default value: `'openipmi'`
+
 ##### <a name="-ipmi--service_ensure"></a>`service_ensure`
 
 Data type: `Variant[Stdlib::Ensure::Service, String[0]]`
 
 Controls the state of the `ipmi` service. Possible values: `running`, `stopped`
+
+Default value: `'%{facts.ipmitool.mc_info.IPMI_Puppet_Service_Recommend}'`
 
 ##### <a name="-ipmi--ipmievd_service_name"></a>`ipmievd_service_name`
 
@@ -81,11 +89,15 @@ Data type: `String`
 
 Name of ipmievd service.
 
+Default value: `'ipmievd'`
+
 ##### <a name="-ipmi--ipmievd_service_ensure"></a>`ipmievd_service_ensure`
 
 Data type: `Stdlib::Ensure::Service`
 
 Controls the state of the `ipmievd` service. Possible values: `running`, `stopped`
+
+Default value: `'stopped'`
 
 ##### <a name="-ipmi--watchdog"></a>`watchdog`
 
@@ -93,11 +105,15 @@ Data type: `Boolean`
 
 Controls whether the IPMI watchdog is enabled.
 
+Default value: `false`
+
 ##### <a name="-ipmi--snmps"></a>`snmps`
 
 Data type: `Optional[Hash]`
 
 `ipmi::snmp` resources to create.
+
+Default value: `undef`
 
 ##### <a name="-ipmi--users"></a>`users`
 
@@ -105,11 +121,15 @@ Data type: `Optional[Hash]`
 
 `ipmi::user` resources to create.
 
+Default value: `undef`
+
 ##### <a name="-ipmi--networks"></a>`networks`
 
 Data type: `Optional[Hash]`
 
 `ipmi::network` resources to create.
+
+Default value: `undef`
 
 ##### <a name="-ipmi--default_channel"></a>`default_channel`
 
@@ -137,7 +157,7 @@ The following parameters are available in the `ipmi::network` defined type:
 
 ##### <a name="-ipmi--network--ip"></a>`ip`
 
-Data type: `Stdlib::IP::Address`
+Data type: `Stdlib::IP::Address::V4::Nosubnet`
 
 Controls the IP of the IPMI network.
 
@@ -145,7 +165,7 @@ Default value: `'0.0.0.0'`
 
 ##### <a name="-ipmi--network--netmask"></a>`netmask`
 
-Data type: `Stdlib::IP::Address`
+Data type: `Stdlib::IP::Address::V4::Nosubnet`
 
 Controls the subnet mask of the IPMI network.
 
@@ -153,7 +173,7 @@ Default value: `'255.255.255.0'`
 
 ##### <a name="-ipmi--network--gateway"></a>`gateway`
 
-Data type: `Stdlib::IP::Address`
+Data type: `Stdlib::IP::Address::V4::Nosubnet`
 
 Controls the gateway of the IPMI network.
 
@@ -230,7 +250,7 @@ Default value: `'root'`
 
 ##### <a name="-ipmi--user--priv"></a>`priv`
 
-Data type: `Integer`
+Data type: `Integer[1, 4]`
 
 Possible values:
 `4` - ADMINISTRATOR,
@@ -269,7 +289,7 @@ Default value: `3`
 
 ##### <a name="-ipmi--user--password"></a>`password`
 
-Data type: `Optional[Variant[Sensitive[String[1]], String[1]]]`
+Data type: `Optional[Variant[Sensitive[String[1, 20]], String[1, 20]]]`
 
 Controls the password of the user to be created.
 
@@ -362,13 +382,13 @@ The following parameters are available in the `ipmi_network` type.
 
 ##### <a name="-ipmi_network--bmcconfig_cmd"></a>`bmcconfig_cmd`
 
-Path to the bmc-config binary (freeipmi).
+Path to the bmc-config binary (freeipmi only).
 
 Default value: `/usr/sbin/bmc-config`
 
 ##### <a name="-ipmi_network--ipmitool_cmd"></a>`ipmitool_cmd`
 
-Path to the ipmitool binary.
+Path to the ipmitool binary (ipmitool only).
 
 Default value: `/usr/bin/ipmitool`
 
@@ -429,21 +449,15 @@ Default value: `public`
 
 The following parameters are available in the `ipmi_snmp` type.
 
-* [`bmcconfig_cmd`](#-ipmi_snmp--bmcconfig_cmd)
 * [`ipmitool_cmd`](#-ipmi_snmp--ipmitool_cmd)
 * [`lan_channel`](#-ipmi_snmp--lan_channel)
 * [`name`](#-ipmi_snmp--name)
+* [`pefconfig_cmd`](#-ipmi_snmp--pefconfig_cmd)
 * [`provider`](#-ipmi_snmp--provider)
-
-##### <a name="-ipmi_snmp--bmcconfig_cmd"></a>`bmcconfig_cmd`
-
-Path to the bmc-config binary (freeipmi).
-
-Default value: `/usr/sbin/bmc-config`
 
 ##### <a name="-ipmi_snmp--ipmitool_cmd"></a>`ipmitool_cmd`
 
-Path to the ipmitool binary.
+Path to the ipmitool binary (ipmitool only).
 
 Default value: `/usr/bin/ipmitool`
 
@@ -458,6 +472,12 @@ Defaults to 1 when unset and not derivable from the title.
 namevar
 
 Resource title. When it is an integer, the lan channel is derived automatically.
+
+##### <a name="-ipmi_snmp--pefconfig_cmd"></a>`pefconfig_cmd`
+
+Path to the ipmi-pef-config binary (freeipmi only).
+
+Default value: `/usr/sbin/ipmi-pef-config`
 
 ##### <a name="-ipmi_snmp--provider"></a>`provider`
 
@@ -519,6 +539,10 @@ Whether this user account should be enabled or disabled.
 
 Default value: `true`
 
+##### `password`
+
+Password for the IPMI user. May be a Sensitive value. Required when enable is true.
+
 ##### `priv`
 
       Privilege level for the user:
@@ -529,6 +553,21 @@ Default value: `true`
 
 Default value: `4`
 
+##### `purge_id_mismatch`
+
+Valid values: `true`, `false`
+
+When true, any IPMI user slot that holds the given username at an ID
+other than user_id will be blanked and disabled.
+
+Default value: `false`
+
+##### `user`
+
+The IPMI username to set.
+
+Default value: `root`
+
 #### Parameters
 
 The following parameters are available in the `ipmi_user` type.
@@ -537,15 +576,12 @@ The following parameters are available in the `ipmi_user` type.
 * [`channel`](#-ipmi_user--channel)
 * [`ipmitool_cmd`](#-ipmi_user--ipmitool_cmd)
 * [`name`](#-ipmi_user--name)
-* [`password`](#-ipmi_user--password)
 * [`provider`](#-ipmi_user--provider)
-* [`purge_id_mismatch`](#-ipmi_user--purge_id_mismatch)
-* [`user`](#-ipmi_user--user)
 * [`user_id`](#-ipmi_user--user_id)
 
 ##### <a name="-ipmi_user--bmcconfig_cmd"></a>`bmcconfig_cmd`
 
-Path to the bmc-config binary (freeipmi).
+Path to the bmc-config binary (freeipmi only).
 
 Default value: `/usr/sbin/bmc-config`
 
@@ -558,7 +594,7 @@ Default value: `1`
 
 ##### <a name="-ipmi_user--ipmitool_cmd"></a>`ipmitool_cmd`
 
-Path to the ipmitool binary.
+Path to the ipmitool binary (ipmitool only).
 
 Default value: `/usr/bin/ipmitool`
 
@@ -568,30 +604,10 @@ namevar
 
 Resource title (arbitrary label for this user resource).
 
-##### <a name="-ipmi_user--password"></a>`password`
-
-Password for the IPMI user. May be a Sensitive value. Required when enable is true.
-
 ##### <a name="-ipmi_user--provider"></a>`provider`
 
 The specific backend to use for this `ipmi_user` resource. You will seldom need to specify this --- Puppet will usually
 discover the appropriate provider for your platform.
-
-##### <a name="-ipmi_user--purge_id_mismatch"></a>`purge_id_mismatch`
-
-Valid values: `true`, `false`
-
-When true, any IPMI user slot that holds the given username at an ID
-other than user_id will be blanked and disabled before the desired
-slot is configured.  Only applies when enable is true.
-
-Default value: `false`
-
-##### <a name="-ipmi_user--user"></a>`user`
-
-The IPMI username to set.
-
-Default value: `root`
 
 ##### <a name="-ipmi_user--user_id"></a>`user_id`
 

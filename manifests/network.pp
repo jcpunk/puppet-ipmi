@@ -13,11 +13,11 @@
 #   Defaults to the first detected lan channel, starting at 1 ending at 11
 #
 define ipmi::network (
-  Stdlib::IP::Address $ip        = '0.0.0.0',
-  Stdlib::IP::Address $netmask   = '255.255.255.0',
-  Stdlib::IP::Address $gateway   = '0.0.0.0',
-  Enum['dhcp', 'static'] $type   = 'dhcp',
-  Optional[Integer] $lan_channel = undef
+  Stdlib::IP::Address::V4::Nosubnet $ip        = '0.0.0.0',
+  Stdlib::IP::Address::V4::Nosubnet $netmask   = '255.255.255.0',
+  Stdlib::IP::Address::V4::Nosubnet $gateway   = '0.0.0.0',
+  Enum['dhcp', 'static'] $type                 = 'dhcp',
+  Optional[Integer] $lan_channel               = undef
 ) {
   require ipmi::install
 
@@ -27,12 +27,12 @@ define ipmi::network (
   }
 
   if $type == 'dhcp' {
-    ipmi_network { "ipmi_network_${title}":
+    ipmi_network { "ipmi_network_${_real_lan_channel}":
       lan_channel => $_real_lan_channel,
       type        => 'dhcp',
     }
   } else {
-    ipmi_network { "ipmi_network_${title}":
+    ipmi_network { "ipmi_network_${_real_lan_channel}":
       lan_channel => $_real_lan_channel,
       type        => 'static',
       ip          => $ip,

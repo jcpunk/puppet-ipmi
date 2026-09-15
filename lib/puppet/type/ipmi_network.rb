@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'resolv'
+
 Puppet::Type.newtype(:ipmi_network) do
   @doc = <<-DOC
     @summary
@@ -52,7 +54,7 @@ Puppet::Type.newtype(:ipmi_network) do
   end
 
   newparam(:ipmitool_cmd) do
-    desc 'Path to the ipmitool binary.'
+    desc 'Path to the ipmitool binary (ipmitool only).'
     defaultto '/usr/bin/ipmitool'
     validate do |value|
       raise Puppet::Error, 'ipmitool_cmd must be an absolute path' unless value.start_with?('/')
@@ -60,7 +62,7 @@ Puppet::Type.newtype(:ipmi_network) do
   end
 
   newparam(:bmcconfig_cmd) do
-    desc 'Path to the bmc-config binary (freeipmi).'
+    desc 'Path to the bmc-config binary (freeipmi only).'
     defaultto '/usr/sbin/bmc-config'
     validate do |value|
       raise Puppet::Error, 'bmcconfig_cmd must be an absolute path' unless value.start_with?('/')
@@ -75,21 +77,21 @@ Puppet::Type.newtype(:ipmi_network) do
   newproperty(:ip) do
     desc 'IP address for the BMC (only used when type is static).'
     validate do |value|
-      raise Puppet::Error, "Invalid IP address: #{value}" unless value =~ %r{^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$}
+      raise Puppet::Error, "Invalid IP address: #{value}" unless value.to_s =~ Resolv::IPv4::Regex
     end
   end
 
   newproperty(:netmask) do
     desc 'Subnet mask for the BMC (only used when type is static).'
     validate do |value|
-      raise Puppet::Error, "Invalid netmask: #{value}" unless value =~ %r{^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$}
+      raise Puppet::Error, "Invalid netmask: #{value}" unless value.to_s =~ Resolv::IPv4::Regex
     end
   end
 
   newproperty(:gateway) do
     desc 'Default gateway for the BMC (only used when type is static).'
     validate do |value|
-      raise Puppet::Error, "Invalid gateway: #{value}" unless value =~ %r{^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$}
+      raise Puppet::Error, "Invalid gateway: #{value}" unless value.to_s =~ Resolv::IPv4::Regex
     end
   end
 end

@@ -3,26 +3,23 @@
 require 'puppet'
 require 'puppet/provider'
 require 'set'
-require 'shellwords'
 
 # Base provider for IPMI-managed resources.
 #
 # Provides generic helpers shared across all IPMI tool implementations.
-# Tool-specific execution (ipmitool, bmc-config) lives in the concrete
-# provider files rather than here.
+# Tool-specific execution helpers live in Puppet::Provider::Ipmi::Ipmitool
+# and Puppet::Provider::Ipmi::Freeipmi.
 class Puppet::Provider::Ipmi < Puppet::Provider
   # IDs already reserved by `user_id => 'auto'` during this Puppet run.
   # This prevents multiple auto resources from selecting the same slot
   # before earlier resources have actually written to the BMC.
   AUTO_ALLOCATED_USER_IDS = Set.new
 
+  # Clear the set of auto-allocated user IDs. Used by tests.
+  #
+  # @return [void]
   def self.reset_auto_allocated_user_ids!
     AUTO_ALLOCATED_USER_IDS.clear
-  end
-
-  # Shell-escape a value for safe interpolation into command strings.
-  def shellescape(val)
-    Shellwords.escape(val.to_s)
   end
 
   # Parse colon-separated key-value output (lines like "Key  : Value").

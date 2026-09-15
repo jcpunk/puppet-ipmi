@@ -6,12 +6,6 @@ These should not affect the functionality of the module.
 
 ## Unreleased
 
-**Implemented enhancements:**
-
-- Move `ipmi::user` to puppet native types supporting either `ipmitool` or `freeipmi`
-
-- support `user_id => 'auto'` for `ipmi_user` and `ipmi::user`
-
 ## [v8.0.0](https://github.com/jhoblitt/puppet-ipmi/tree/v8.0.0) (2026-03-12)
 
 [Full Changelog](https://github.com/jhoblitt/puppet-ipmi/compare/v7.0.0...v8.0.0)

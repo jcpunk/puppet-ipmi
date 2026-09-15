@@ -40,11 +40,6 @@ Puppet::Type.newtype(:ipmi_user) do
     desc 'Resource title (arbitrary label for this user resource).'
   end
 
-  newparam(:user) do
-    desc 'The IPMI username to set.'
-    defaultto 'root'
-  end
-
   newparam(:user_id) do
     desc <<-DESC
       The numeric IPMI user slot ID, or 'auto' to let the provider select one.
@@ -63,12 +58,8 @@ Puppet::Type.newtype(:ipmi_user) do
       raise Puppet::Error, 'user_id must be a positive integer or "auto"' unless str == 'auto' || (str =~ %r{^\d+$} && value.to_i.positive?)
     end
     munge do |value|
-      value.to_s == 'auto' ? :auto : value.to_i
+      (value.to_s == 'auto') ? :auto : value.to_i
     end
-  end
-
-  newparam(:password) do
-    desc 'Password for the IPMI user. May be a Sensitive value. Required when enable is true.'
   end
 
   newparam(:channel) do
@@ -84,7 +75,7 @@ Puppet::Type.newtype(:ipmi_user) do
   end
 
   newparam(:ipmitool_cmd) do
-    desc 'Path to the ipmitool binary.'
+    desc 'Path to the ipmitool binary (ipmitool only).'
     defaultto '/usr/bin/ipmitool'
     validate do |value|
       raise Puppet::Error, 'ipmitool_cmd must be an absolute path' unless value.start_with?('/')
@@ -92,27 +83,32 @@ Puppet::Type.newtype(:ipmi_user) do
   end
 
   newparam(:bmcconfig_cmd) do
-    desc 'Path to the bmc-config binary (freeipmi).'
+    desc 'Path to the bmc-config binary (freeipmi only).'
     defaultto '/usr/sbin/bmc-config'
     validate do |value|
       raise Puppet::Error, 'bmcconfig_cmd must be an absolute path' unless value.start_with?('/')
     end
   end
 
-  newparam(:purge_id_mismatch) do
-    desc <<-DESC
-      When true, any IPMI user slot that holds the given username at an ID
-      other than user_id will be blanked and disabled before the desired
-      slot is configured.  Only applies when enable is true.
-    DESC
-    newvalues(:true, :false)
-    defaultto :false
+  newproperty(:user) do
+    desc 'The IPMI username to set.'
+    defaultto 'root'
+    validate do |value|
+      str = value.to_s
+      raise Puppet::Error, 'user must be a non-empty string' if str.empty?
+      raise Puppet::Error, 'user name must be 16 characters or fewer' if str.length > 16
+      raise Puppet::Error, 'user name must not contain whitespace' if str =~ %r{\s}
+    end
   end
 
-  newproperty(:enable) do
-    desc 'Whether this user account should be enabled or disabled.'
-    newvalues(:true, :false)
-    defaultto :true
+  newproperty(:password) do
+    desc 'Password for the IPMI user. May be a Sensitive value. Required when enable is true.'
+
+    def insync?(_is)
+      return true if should.nil?
+
+      @resource.provider.password_insync?
+    end
   end
 
   newproperty(:priv) do
@@ -136,6 +132,27 @@ Puppet::Type.newtype(:ipmi_user) do
       return true if @resource[:enable] == :false
 
       is.to_i == should.to_i
+    end
+  end
+
+  newproperty(:enable) do
+    desc 'Whether this user account should be enabled or disabled.'
+    newvalues(:true, :false)
+    defaultto :true
+  end
+
+  newproperty(:purge_id_mismatch) do
+    desc <<-DESC
+      When true, any IPMI user slot that holds the given username at an ID
+      other than user_id will be blanked and disabled.
+    DESC
+    newvalues(:true, :false)
+    defaultto :false
+
+    def insync?(is)
+      return true if should == :false
+
+      is == :true
     end
   end
 

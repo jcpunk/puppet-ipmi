@@ -10,7 +10,7 @@ describe 'ipmi::snmp', type: :define do
         name: 'CentOS',
         release: {
           major: 9,
-        }
+        },
 
       },
       ipmitool: { mc_info: { IPMI_Puppet_Service_Recommend: 'running' } },
@@ -24,9 +24,9 @@ describe 'ipmi::snmp', type: :define do
     it { is_expected.to compile.with_all_deps }
 
     it {
-      is_expected.to contain_ipmi_snmp('ipmi_snmp_example').with(
+      is_expected.to contain_ipmi_snmp('ipmi_snmp_1').with(
         lan_channel: 1,
-        community: 'public'
+        community: 'public',
       )
     }
   end
@@ -42,9 +42,9 @@ describe 'ipmi::snmp', type: :define do
     it { is_expected.to compile.with_all_deps }
 
     it {
-      is_expected.to contain_ipmi_snmp('ipmi_snmp_example').with(
+      is_expected.to contain_ipmi_snmp('ipmi_snmp_2').with(
         lan_channel: 2,
-        community: 'secret'
+        community: 'secret',
       )
     }
   end

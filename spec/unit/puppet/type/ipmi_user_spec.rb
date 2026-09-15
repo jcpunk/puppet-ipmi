@@ -5,13 +5,13 @@ require 'puppet/type/ipmi_user'
 
 describe Puppet::Type.type(:ipmi_user) do
   describe 'when validating attributes' do
-    %i[name user user_id password channel ipmitool_cmd bmcconfig_cmd purge_id_mismatch].each do |param|
+    %i[name user_id channel ipmitool_cmd bmcconfig_cmd].each do |param|
       it "has a #{param} parameter" do
         expect(described_class.attrtype(param)).to eq(:param)
       end
     end
 
-    %i[enable priv].each do |prop|
+    %i[user password enable priv purge_id_mismatch].each do |prop|
       it "has a #{prop} property" do
         expect(described_class.attrtype(prop)).to eq(:property)
       end
@@ -73,6 +73,11 @@ describe Puppet::Type.type(:ipmi_user) do
         resource = described_class.new(name: "test#{p}", password: 'secret', priv: p)
         expect(resource[:priv]).to eq(p)
       end
+    end
+
+    it 'ignores priv mismatch when enable is false' do
+      resource = described_class.new(name: 'test', enable: :false, priv: 3)
+      expect(resource.property(:priv).insync?(4)).to be(true)
     end
 
     it 'rejects invalid user_id' do

@@ -18,7 +18,7 @@ define ipmi::snmp (
     default => $lan_channel,
   }
 
-  ipmi_snmp { "ipmi_snmp_${title}":
+  ipmi_snmp { "ipmi_snmp_${_real_lan_channel}":
     lan_channel => $_real_lan_channel,
     community   => $snmp,
   }

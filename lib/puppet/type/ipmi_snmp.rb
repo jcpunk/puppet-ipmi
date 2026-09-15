@@ -47,23 +47,28 @@ Puppet::Type.newtype(:ipmi_snmp) do
   end
 
   newparam(:ipmitool_cmd) do
-    desc 'Path to the ipmitool binary.'
+    desc 'Path to the ipmitool binary (ipmitool only).'
     defaultto '/usr/bin/ipmitool'
     validate do |value|
       raise Puppet::Error, 'ipmitool_cmd must be an absolute path' unless value.start_with?('/')
     end
   end
 
-  newparam(:bmcconfig_cmd) do
-    desc 'Path to the bmc-config binary (freeipmi).'
-    defaultto '/usr/sbin/bmc-config'
+  newparam(:pefconfig_cmd) do
+    desc 'Path to the ipmi-pef-config binary (freeipmi only).'
+    defaultto '/usr/sbin/ipmi-pef-config'
     validate do |value|
-      raise Puppet::Error, 'bmcconfig_cmd must be an absolute path' unless value.start_with?('/')
+      raise Puppet::Error, 'pefconfig_cmd must be an absolute path' unless value.start_with?('/')
     end
   end
 
   newproperty(:community) do
     desc 'SNMP community string.'
     defaultto 'public'
+    validate do |value|
+      str = value.to_s
+      raise Puppet::Error, 'community must be a non-empty string' if str.empty?
+      raise Puppet::Error, 'community must be 18 characters or fewer' if str.length > 18
+    end
   end
 end

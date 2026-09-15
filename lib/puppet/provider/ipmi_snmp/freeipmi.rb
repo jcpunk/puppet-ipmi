@@ -1,45 +1,24 @@
 # frozen_string_literal: true
 
 require 'puppet'
-require File.join(File.dirname(__FILE__), '..', 'ipmi')
+require File.join(File.dirname(__FILE__), '..', 'ipmi', 'freeipmi')
 
 Puppet::Type.type(:ipmi_snmp).provide(
   :freeipmi,
-  parent: Puppet::Provider::Ipmi
+  parent: Puppet::Provider::Ipmi::Freeipmi,
 ) do
-  desc 'Manage BMC SNMP community string via freeipmi (bmc-config)'
+  desc 'Manage BMC SNMP community string via freeipmi (ipmi-pef-config)'
 
-  confine commands: { bmcconfig: 'bmc-config' }
+  commands pefconfig: 'ipmi-pef-config'
+  confine commands: { pefconfig: 'ipmi-pef-config' }
 
-  def bmcconfig_cmd
-    @resource[:bmcconfig_cmd] || '/usr/sbin/bmc-config'
+  def pefconfig_cmd
+    @resource[:pefconfig_cmd] || '/usr/sbin/ipmi-pef-config'
   end
 
-  def bmcconfig_exec(args, failonfail: false)
-    Puppet::Util::Execution.execute("#{bmcconfig_cmd} #{args}", failonfail: failonfail)
-  end
-
-  def lan_channel
-    @resource[:lan_channel]
-  end
-
-  # Parse bmc-config checkout output for a given section and key.
-  def bmc_config_get(section, key)
-    output = bmcconfig_exec("--checkout --section #{section} 2>/dev/null")
-    return nil if output.nil? || output.empty?
-
-    output.each_line do |line|
-      stripped = line.strip
-      return Regexp.last_match(1).strip if stripped =~ %r{^#{Regexp.escape(key)}\s+(.+)$}
-    end
-    nil
-  end
-
-  def bmc_config_set(section, key, value)
-    bmcconfig_exec(
-      "--commit --key-pair #{shellescape("#{section}:#{key}=#{value}")}",
-      failonfail: true
-    )
+  def pefconfig_exec(argv, failonfail: false)
+    cmd = [pefconfig_cmd] + Array(argv)
+    Puppet::Util::Execution.execute(cmd, failonfail: failonfail)
   end
 
   # ---------------------------------------------------------------------------
@@ -47,10 +26,24 @@ Puppet::Type.type(:ipmi_snmp).provide(
   # ---------------------------------------------------------------------------
 
   def community
-    bmc_config_get("Lan_Channel:#{lan_channel}", 'Community_String')
+    output = pefconfig_exec(['--checkout', '--section', "Community_String_Channel_#{lan_channel}"])
+    return nil if output.nil? || output.empty?
+
+    output.each_line do |line|
+      stripped = line.strip
+      return Regexp.last_match(1).strip if stripped =~ %r{^Community_String\s+(.+)$}
+    end
+    nil
   end
 
   def community=(val)
-    bmc_config_set("Lan_Channel:#{lan_channel}", 'Community_String', val)
+    pefconfig_exec(
+      [
+        '--commit',
+        '--key-pair',
+        "Community_String_Channel_#{lan_channel}:Community_String=#{val}",
+      ],
+      failonfail: true,
+    )
   end
 end

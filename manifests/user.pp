@@ -36,13 +36,13 @@
 #   BMC-standard equivalent. Defaults to false. Only applies when $enable is true.
 #
 define ipmi::user (
-  String $user                                                 = 'root',
-  Integer $priv                                                = 4,
-  Boolean $enable                                              = true,
-  Variant[Integer, Enum['auto']] $user_id                      = 3,
-  Optional[Variant[Sensitive[String[1]], String[1]]] $password = undef,
-  Optional[Integer] $channel                                   = undef,
-  Boolean $purge_id_mismatch                                   = false,
+  String $user                                                   = 'root',
+  Integer[1, 4] $priv                                            = 4,
+  Boolean $enable                                                = true,
+  Variant[Integer, Enum['auto']] $user_id                        = 3,
+  Optional[Variant[Sensitive[String[1, 20]], String[1, 20]]] $password = undef,
+  Optional[Integer] $channel                                     = undef,
+  Boolean $purge_id_mismatch                                     = false,
 ) {
   require ipmi::install
 
