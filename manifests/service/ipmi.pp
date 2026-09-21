@@ -10,8 +10,6 @@ class ipmi::service::ipmi (
 
   service { $ipmi_service_name:
     ensure     => $ensure,
-    hasstatus  => true,
-    hasrestart => true,
     enable     => $enable,
   }
 }
