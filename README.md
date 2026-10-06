@@ -44,21 +44,19 @@ See [REFERENCE](REFERENCE.md)
   include ipmi
 ```
 
-Create a user with admin privileges (default):
+Create a user with admin privileges in any slot (default):
 
 ```puppet
-  ipmi::user { 'newuser1':
-    user     => 'newuser1',
+  ipmi_user { 'newuser1':
     password => 'password1',
-    user_id  => 4,
   }
 ```
 
 Create a user with operator privileges:
 
 ```puppet
-  ipmi::user { 'newuser2':
-    user     => 'newuser2',
+  ipmi_user { 'operator user: newuser2':
+    username => 'newuser2',
     password => 'password2',
     priv     => 3,
     user_id  => 5,
@@ -68,8 +66,7 @@ Create a user with operator privileges:
 Create a user with user privileges on a specific channel:
 
 ```puppet
-  ipmi::user { 'newuser3':
-    user     => 'newuser3',
+  ipmi_user { 'newuser3':
     password => 'password3',
     priv     => 2,
     user_id  => 6,
@@ -77,13 +74,23 @@ Create a user with user privileges on a specific channel:
   }
 ```
 
-Create a user and remove any instance with the wrong `user_id`:
+Create a user and remove it from any other slot (for example after moving
+it to a different `user_id`):
+
 ```puppet
-  ipmi::user { 'newuser1':
-    user     => 'newuser1',
-    password => 'password1',
-    user_id  => 4,
-    purge_id_mismatch => true,
+  ipmi_user { 'newuser1':
+    password         => 'password1',
+    user_id          => 4,
+    purge_duplicates => true,
+  }
+```
+
+Remove a user (the slot is renamed `DISABLED_<id>`, and access is revoked if
+it was still enabled):
+
+```puppet
+  ipmi_user { 'olduser':
+    ensure => absent,
   }
 ```
 
@@ -91,28 +98,47 @@ Create a user and remove any instance with the wrong `user_id`:
 Configure a static ip on IPMI lan channel 1:
 
 ```puppet
-  ipmi::network { 'lan1':
+  ipmi_network { 'lan1':
     type        => 'static',
     ip          => '192.168.1.10',
     netmask     => '255.255.255.0',
     gateway     => '192.168.1.1',
+    lan_channel => 1,
   }
 ```
 
 Configure IPMI lan channel 1 to DHCP:
 
 ```puppet
-  ipmi::network { 'dhcp': }
+  ipmi_network { 'lan1 DHCP':
+    type        => 'dhcp',
+    lan_channel => 1,
+  }
 ```
 
 Configure IPMI snmp string on lan channel 1:
 
 ```puppet
- ipmi::snmp { 'lan1':
-   snmp        => 'secret',
-   lan_channel => 1,
- }
+  ipmi_snmp { 'lan1':
+    community   => 'secret',
+    lan_channel => 1,
+  }
 ```
+
+### Backend selection
+
+`ipmitool` is the supported backend and the default on Linux. The
+`freeipmi` providers are experimental. To force a specific backend, set
+the provider on the resource:
+
+```puppet
+  ipmi_user { 'newuser1':
+    password => 'password1',
+    provider => 'freeipmi',
+  }
+```
+
+NOTE: the `freeipmi` backend is **EXPERIMENTAL** and may not work in all cases!
 
 ### Classes
 
@@ -127,38 +153,89 @@ Configure IPMI snmp string on lan channel 1:
   }
 ```
 
-### Defined Resources
+When `users`, `networks`, or `snmps` are passed as class parameters, the
+`ipmi` class declares the corresponding native resources and injects the
+`default_channel` value for any resource that does not specify a channel.
+`ipmi_network` and `ipmi_snmp` reject catalogs where two resources target
+the same LAN channel, preventing them from fighting on every run.
 
-#### `ipmi::user`
+### Native Resources
+
+The public API consists of the native Puppet types `ipmi_user`,
+`ipmi_network`, and `ipmi_snmp`. The previous wrapper defined types
+(`ipmi::user`, `ipmi::network`, `ipmi::snmp`) have been removed.
+
+When upgrading from 8.x or earlier:
+- `ipmi_user` takes `username`, not `user`.
+- `ipmi_user`'s `user_id` now defaults to `'auto'`.
+- `ipmi_user`'s username now defaults to the `namevar` rather than `root`.
+- `ipmi::snmps` entries and `ipmi_snmp` take `community`, not `snmp`.
+- `ip`, `netmask` or `gateway` together with `type => 'dhcp'` is rejected,
+  and the error fails the whole agent run.
+- A static `ipmi_network` no longer defaults `netmask` to `255.255.255.0`
+  or `gateway` to `0.0.0.0`; unset ones keep whatever the BMC holds.
+- `ipmi::default_channel` applies only to resources declared through the
+  `ipmi` class.
+- `purge_id_mismatch` is now `ipmi_user`'s `purge_duplicates` (see below).
+  It also applies to disabled users.
+- A catalog that declares the same username, or the same explicit `user_id`,
+  twice on one channel is rejected.
+
+#### `ipmi_user`
 
 ```puppet
   # defaults
-  ipmi::user { 'newuser':
-    user     => 'root',
+  ipmi_user { 'newuser':
     priv     => 4,           # Administrator
-    user_id  => 3,
+    user_id  => 'auto',      # auto-select a slot
+    channel  => 1,
   }
 ```
 
-#### `ipmi::network`
+When `enable => false`, the BMC user slot is disabled and its privilege is
+forced to `NO ACCESS` regardless of the `priv` value.  This makes disabled
+resources suitable for reserving a slot ID without granting login access.
+
+IPMI cannot delete a slot.  `ensure => absent` renames the slot to
+`DISABLED_<id>`, after removing channel and SOL access if the account is still
+enabled.  BMCs do not allow permission changes on a disabled account, so a slot
+that is already disabled (for example a reserved `enable => false` user) is
+only renamed.  Slots with an empty or `DISABLED_*` name are treated as free.
+
+##### Slot allocation (`user_id => 'auto'`)
+
+Slots are chosen from the BMC's current user table and the whole catalog, so
+the result does not depend on resource evaluation order:
+
+1. Explicit `user_id` values are reserved first.
+2. A user that already holds a slot keeps it (the lowest id if several).
+3. The remaining `auto` resources, sorted by title, take the lowest free
+   slots.  Slot 1 (anonymous) is never allocated.
+4. A resource that finds no free slot fails on its own; the others apply.
+
+##### Removing duplicates (`purge_duplicates => true`)
+
+Each other slot that holds the same username is blanked and disabled.  They
+appear in the report as generated `ipmi_user` resources with
+`ensure => absent` (titled `<title> (duplicate in slot <id>)`), run before the
+resource that generated them, and honour `--noop`.
+
+Slots managed by other resources in the catalog and slot 1 are never purged.
+
+#### `ipmi_network`
 
 ```puppet
-  # defaults
-  ipmi::network { 'lan1':
+  ipmi_network { 'lan1':
     type        => 'dhcp',
-    ip          => '0.0.0.0',
-    netmask     => '255.255.255.0',
-    gateway     => '0.0.0.0',
     lan_channel => 1,
   }
 ```
 
-#### `ipmi::snmp`
+#### `ipmi_snmp`
 
 ```puppet
-  # defaults
-  ipmi::snmp { 'lan1':
-    snmp        => 'public',
+  ipmi_snmp { 'lan1':
+    community   => 'public',
     lan_channel => 1,
   }
 ```
