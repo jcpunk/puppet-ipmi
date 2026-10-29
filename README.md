@@ -168,6 +168,7 @@ The public API consists of the native Puppet types `ipmi_user`,
 When upgrading from 8.x or earlier:
 - `ipmi_user` takes `username`, not `user`.
 - `ipmi_user`'s `user_id` now defaults to `'auto'`.
+- `ipmi_user`'s username now defaults to the `namevar` rather than `root`.
 - `ipmi::snmps` entries and `ipmi_snmp` take `community`, not `snmp`.
 - `ip`, `netmask` or `gateway` together with `type => 'dhcp'` is rejected,
   and the error fails the whole agent run.
@@ -175,7 +176,6 @@ When upgrading from 8.x or earlier:
   or `gateway` to `0.0.0.0`; unset ones keep whatever the BMC holds.
 - `ipmi::default_channel` applies only to resources declared through the
   `ipmi` class.
-- The `ipmi_user`'s username now defaults to the `namevar` rather than `root`.
 - `purge_id_mismatch` is now `ipmi_user`'s `purge_duplicates` (see below).
   It also applies to disabled users.
 - A catalog that declares the same username, or the same explicit `user_id`,
@@ -218,8 +218,9 @@ the result does not depend on resource evaluation order:
 Each other slot that holds the same username is blanked and disabled.  They
 appear in the report as generated `ipmi_user` resources with
 `ensure => absent` (titled `<title> (duplicate in slot <id>)`), run before the
-resource that generated them, and honour `--noop`.  Slots managed by other
-resources in the catalog and slot 1 are never purged.
+resource that generated them, and honour `--noop`.
+
+Slots managed by other resources in the catalog and slot 1 are never purged.
 
 #### `ipmi_network`
 
