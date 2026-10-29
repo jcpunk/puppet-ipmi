@@ -74,12 +74,22 @@ Create a user with user privileges on a specific channel:
   }
 ```
 
-Create a user and remove any instance with the wrong `user_id`:
+Create a user and remove it from any other slot (for example after moving
+it to a different `user_id`):
+
 ```puppet
   ipmi_user { 'newuser1':
-    password => 'password1',
-    user_id  => 4,
-    purge_id_mismatch => true,
+    password         => 'password1',
+    user_id          => 4,
+    purge_duplicates => true,
+  }
+```
+
+Remove a user (the slot is renamed `DISABLED_<id>` and loses all access):
+
+```puppet
+  ipmi_user { 'olduser':
+    ensure => absent,
   }
 ```
 
@@ -165,6 +175,13 @@ When upgrading from 8.x or earlier:
 - `ipmi::default_channel` applies only to resources declared through the
   `ipmi` class.
 - The `ipmi_user`'s username now defaults to the `namevar` rather than `root`.
+- `ipmi_user` is ensurable (default `present`).  `username` is now a
+  parameter, not a property.
+- `ipmi_user`'s `purge_id_mismatch` property is replaced by the
+  `purge_duplicates` parameter (see below).
+- `user_id => 'auto'` is now allocated deterministically for the whole
+  catalog (see below).  A catalog that declares the same username twice, or
+  the same explicit `user_id` twice, on one channel is rejected.
 
 #### `ipmi_user`
 
@@ -180,8 +197,29 @@ When upgrading from 8.x or earlier:
 When `enable => false`, the BMC user slot is disabled and its privilege is
 forced to `NO ACCESS` regardless of the `priv` value.  This makes disabled
 resources suitable for reserving a slot ID without granting login access.
-`purge_id_mismatch => true` will also remove duplicate usernames from other
-slots when the resource is disabled.
+
+IPMI cannot delete a slot.  `ensure => absent` renames the slot to
+`DISABLED_<id>` and removes channel and SOL access.  Slots with an empty or
+`DISABLED_*` name are treated as free.
+
+##### Slot allocation (`user_id => 'auto'`)
+
+Slots are chosen from the BMC's current user table and the whole catalog, so
+the result does not depend on resource evaluation order:
+
+1. Explicit `user_id` values are reserved first.
+2. A user that already holds a slot keeps it (the lowest id if several).
+3. The remaining `auto` resources, sorted by title, take the lowest free
+   slots.  Slot 1 (anonymous) is never allocated.
+4. A resource that finds no free slot fails on its own; the others apply.
+
+##### Removing duplicates (`purge_duplicates => true`)
+
+Each other slot that holds the same username is blanked and disabled.  They
+appear in the report as generated `ipmi_user` resources with
+`ensure => absent` (titled `<title> (duplicate in slot <id>)`), run before the
+resource that generated them, and honour `--noop`.  Slots managed by other
+resources in the catalog and slot 1 are never purged.
 
 #### `ipmi_network`
 

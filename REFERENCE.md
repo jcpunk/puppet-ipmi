@@ -274,8 +274,9 @@ Supports both ipmitool and freeipmi backends.  Manages user name,
 password, privilege level, enabled state, SOL access, and channel
 access in an idempotent fashion.
 
-The resource title is used as the IPMI username unless the `user`
-property is given explicitly.
+The resource title is used as the IPMI username unless the `username`
+property is given explicitly.  `user_id` defaults to `'auto'`, which
+lets the provider select a slot.
 
 #### Examples
 
@@ -284,7 +285,6 @@ property is given explicitly.
 ```puppet
 ipmi_user { 'admin':
   password => Sensitive('s3cret'),
-  user_id  => 3,
   priv     => 4,
   channel  => 1,
   enable   => true,
@@ -295,9 +295,9 @@ ipmi_user { 'admin':
 
 ```puppet
 ipmi_user { 'old_user':
-  user_id => 5,
-  channel => 1,
-  enable  => false,
+  user_id  => 5,
+  channel  => 1,
+  enable   => false,
 }
 ```
 
@@ -305,7 +305,7 @@ ipmi_user { 'old_user':
 
 ```puppet
 ipmi_user { 'reserved_operator':
-  user     => 'OPERATOR',
+  username => 'OPERATOR',
   user_id  => 5,
   channel  => 1,
   enable   => false,
@@ -317,7 +317,6 @@ ipmi_user { 'reserved_operator':
 ```puppet
 ipmi_user { 'auto_user':
   password => Sensitive('s3cret'),
-  user_id  => 'auto',
   priv     => 4,
   channel  => 1,
 }
@@ -327,7 +326,7 @@ ipmi_user { 'auto_user':
 
 ```puppet
 ipmi_user { 'admin_account':
-  user     => 'admin',
+  username => 'admin',
   password => Sensitive('s3cret'),
   user_id  => 3,
   priv     => 4,
@@ -347,6 +346,16 @@ Whether this user account should be enabled or disabled.
 
 Default value: `true`
 
+##### `ensure`
+
+Valid values: `present`, `absent`
+
+Whether the user exists.  IPMI cannot delete a user slot, so `absent`
+renames the slot to `DISABLED_<id>` and removes all channel and SOL
+access; the slot is then treated as free.
+
+Default value: `present`
+
 ##### `password`
 
 Password for the IPMI user. May be a Sensitive value. Required when enable is true.
@@ -361,23 +370,6 @@ Password for the IPMI user. May be a Sensitive value. Required when enable is tr
 
 Default value: `4`
 
-##### `purge_id_mismatch`
-
-Valid values: `true`, `false`
-
-Corrective property. When true, any IPMI user slot that holds the
-given username at an ID other than user_id will be blanked and disabled.
-
-This is not persistent state; it is a one-time remediation that runs
-whenever a mismatch is detected.  It only applies when enable is true;
-disabling a slot never purges duplicates.
-
-Default value: `false`
-
-##### `user`
-
-The IPMI username to set.  Defaults to the resource title.
-
 #### Parameters
 
 The following parameters are available in the `ipmi_user` type.
@@ -385,7 +377,9 @@ The following parameters are available in the `ipmi_user` type.
 * [`channel`](#-ipmi_user--channel)
 * [`name`](#-ipmi_user--name)
 * [`provider`](#-ipmi_user--provider)
+* [`purge_duplicates`](#-ipmi_user--purge_duplicates)
 * [`user_id`](#-ipmi_user--user_id)
+* [`username`](#-ipmi_user--username)
 
 ##### <a name="-ipmi_user--channel"></a>`channel`
 
@@ -396,24 +390,50 @@ Defaults to the ipmi.default.channel fact, or 1 when unavailable.
 
 namevar
 
-Resource title.  Used as the IPMI username when `user` is not set.
+Resource title.  Used as the IPMI username when `username` is not set.
 
 ##### <a name="-ipmi_user--provider"></a>`provider`
 
 The specific backend to use for this `ipmi_user` resource. You will seldom need to specify this --- Puppet will usually
 discover the appropriate provider for your platform.
 
+##### <a name="-ipmi_user--purge_duplicates"></a>`purge_duplicates`
+
+Valid values: `true`, `false`, `yes`, `no`
+
+Also remove other slots that hold this username.
+
+A user normally lives in one slot.  When the same username appears in
+another slot (for example after the slot changed from one `user_id` to
+another) the extra slot is blanked and disabled.  Each duplicate is
+reported as its own generated `ipmi_user` resource with
+`ensure => absent`, applied before this resource, so it honours
+`--noop` and is idempotent.
+
+Slots managed by other resources in the catalog, and the anonymous
+slot 1, are never purged.
+
+Default value: `false`
+
 ##### <a name="-ipmi_user--user_id"></a>`user_id`
 
 The numeric IPMI user slot ID, or 'auto' to let the provider select one.
 
-When set to 'auto', the provider first checks for an existing user with
-the requested username and reuses that ID.  Otherwise it selects the
-lowest unused ID reported by the BMC.  ID 1 is the anonymous slot and is
-never returned by 'auto'.
+With 'auto' the slot is chosen from the BMC's current user table and
+the whole catalog, so it does not depend on resource evaluation order:
+explicit `user_id` values are reserved first, a user that already holds
+a slot keeps it (lowest id if several), and remaining 'auto' resources
+take the lowest free slots in title order.  A slot is free when its id
+is 2 or more and its name is empty or `DISABLED_*`.  ID 1 is the
+anonymous slot and is never allocated.  A resource that finds no free
+slot fails on its own; the others still apply.
 
 On SuperMicro IPMI, user id 2 is reserved for the ADMIN username.
 On ASUS IPMI, user id 2 is reserved for the admin username.
 
-Default value: `3`
+Default value: `auto`
+
+##### <a name="-ipmi_user--username"></a>`username`
+
+The IPMI username.  Defaults to the resource title.
 
