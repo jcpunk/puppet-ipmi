@@ -85,7 +85,8 @@ it to a different `user_id`):
   }
 ```
 
-Remove a user (the slot is renamed `DISABLED_<id>` and loses all access):
+Remove a user (the slot is renamed `DISABLED_<id>`, and access is revoked if
+it was still enabled):
 
 ```puppet
   ipmi_user { 'olduser':
@@ -199,8 +200,10 @@ forced to `NO ACCESS` regardless of the `priv` value.  This makes disabled
 resources suitable for reserving a slot ID without granting login access.
 
 IPMI cannot delete a slot.  `ensure => absent` renames the slot to
-`DISABLED_<id>` and removes channel and SOL access.  Slots with an empty or
-`DISABLED_*` name are treated as free.
+`DISABLED_<id>`, after removing channel and SOL access if the account is still
+enabled.  BMCs do not allow permission changes on a disabled account, so a slot
+that is already disabled (for example a reserved `enable => false` user) is
+only renamed.  Slots with an empty or `DISABLED_*` name are treated as free.
 
 ##### Slot allocation (`user_id => 'auto'`)
 

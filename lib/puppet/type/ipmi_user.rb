@@ -56,8 +56,10 @@ Puppet::Type.newtype(:ipmi_user) do
   ensurable do
     desc <<-DESC
       Whether the user exists.  IPMI cannot delete a user slot, so `absent`
-      renames the slot to `DISABLED_<id>` and removes all channel and SOL
-      access; the slot is then treated as free.
+      first removes channel and SOL access (only while the account is still
+      enabled, because BMCs do not allow permission changes on a disabled
+      account) and then renames the slot to `DISABLED_<id>`; the slot is then
+      treated as free.
     DESC
     defaultto :present
 
