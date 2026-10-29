@@ -15,7 +15,7 @@ describe Puppet::Provider::Ipmi::UserLogic do
   let(:log) { [] }
   let(:provider_class) { FakeUserBmc.provider_class(table, log, password: 'secret') }
   let(:params) do
-    { name: 'bob', username: 'bob', password: 'secret', priv: 4, enable: :true, channel: 1, user_id: 3, purge_id_mismatch: :false }
+    { name: 'bob', username: 'bob', password: 'secret', priv: 4, enable: :true, channel: 1, user_id: 3, purge_duplicates: false }
   end
   let(:provider) { provider_class.provider_for(params, provider_class.read_users(1)) }
 
@@ -244,51 +244,68 @@ describe Puppet::Provider::Ipmi::UserLogic do
     end
   end
 
-  describe 'purge_id_mismatch' do
+  describe '.stray_slots' do
     before do
       table[0][:name] = 'bob'
       table[1][:name] = 'bob'
-      table[1][:enabled] = true
+      table[2][:name] = 'bob'
     end
 
-    it 'reports :true when purging is not requested' do
-      expect(provider.purge_id_mismatch).to eq(:true)
+    it 'reports every slot with the username that no resource claims' do
+      expect(described_class.stray_slots(table, 'bob', [3]).map { |u| u[:id] }).to eq([2])
     end
 
-    it 'reports :false while a duplicate exists' do
-      params[:purge_id_mismatch] = :true
-      expect(provider.purge_id_mismatch).to eq(:false)
+    it 'never reports the anonymous slot' do
+      expect(described_class.stray_slots(table, 'bob', []).map { |u| u[:id] }).to eq([2, 3])
     end
 
-    it 'blanks and disables every duplicate, leaving the resolved slot alone' do
-      params[:purge_id_mismatch] = :true
-      params[:user_id] = 1
-      provider.purge_id_mismatch = :true
-
-      expect(log).to eq([[:name, 2, 'DISABLED_2'], [:access, 2, false, 15]])
+    it 'ignores slots claimed by other resources' do
+      expect(described_class.stray_slots(table, 'bob', [2, 3])).to be_empty
     end
 
-    it 'ignores slots already marked DISABLED_*' do
-      params[:purge_id_mismatch] = :true
-      params[:user_id] = 1
-      table[1][:name] = 'DISABLED_2'
-      expect(provider.purge_id_mismatch).to eq(:true)
+    it 'ignores other usernames' do
+      expect(described_class.stray_slots(table, 'amy', [])).to be_empty
+    end
+  end
+
+  describe '.stray_slots on the provider class' do
+    let(:holder) do
+      Struct.new(:data) do
+        def [](key) = data[key]
+      end
     end
 
-    it 'converges after purging' do
-      params[:purge_id_mismatch] = :true
-      params[:user_id] = 1
-      provider.purge_id_mismatch = :true
-
-      expect(provider.purge_id_mismatch).to eq(:true)
+    before do
+      table[0][:name] = 'bob'
+      table[1][:name] = 'bob'
     end
 
-    it 'purges on the run that creates the user' do
-      params[:purge_id_mismatch] = :true
-      params[:user_id] = 3
-      provider.create
+    it 'treats the canonical slot of the resource as claimed' do
+      bob = holder.new(params.merge(user_id: 3, ensure: :present))
+      table[2][:name] = 'bob'
 
-      expect(log).to include([:name, 1, 'DISABLED_1'], [:name, 2, 'DISABLED_2'])
+      expect(provider_class.stray_slots(bob, [bob]).map { |u| u[:id] }).to eq([2])
+    end
+
+    it 'keeps an existing auto slot and reports the others' do
+      bob = holder.new(params.merge(user_id: :auto))
+      table[2][:name] = 'bob'
+
+      expect(provider_class.stray_slots(bob, [bob]).map { |u| u[:id] }).to eq([3])
+    end
+
+    it 'skips slots another catalog resource claims explicitly' do
+      bob = holder.new(params.merge(user_id: 3))
+      other = holder.new(params.merge(name: 'other', username: 'other', user_id: 2))
+
+      expect(provider_class.stray_slots(bob, [bob, other])).to be_empty
+    end
+
+    it 'reports nothing when the resource cannot get a slot' do
+      table.each { |u| u[:name] = "user#{u[:id]}" }
+      bob = holder.new(params.merge(user_id: :auto))
+
+      expect(provider_class.stray_slots(bob, [bob])).to be_empty
     end
   end
 

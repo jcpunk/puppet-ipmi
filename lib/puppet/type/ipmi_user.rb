@@ -174,27 +174,21 @@ Puppet::Type.newtype(:ipmi_user) do
     end
   end
 
-  # Design note: this is deliberately a property, not a param.  The decision
-  # to purge depends on current BMC state (does the username exist at another
-  # slot?), which only the provider can observe.  A param cannot see provider
-  # state, so remediation is modeled as a corrective property whose 'is'
-  # value reports whether a mismatched slot currently exists.
-  newproperty(:purge_id_mismatch) do
+  newparam(:purge_duplicates, boolean: true, parent: Puppet::Parameter::Boolean) do
     desc <<-DESC
-      Corrective property. When true, any IPMI user slot that holds the
-      given username at an ID other than user_id will be blanked and disabled.
+      Also remove other slots that hold this username.
 
-      This is not persistent state; it is a one-time remediation that runs
-      whenever a mismatch is detected.
+      A user normally lives in one slot.  When the same username appears in
+      another slot (for example after the slot changed from one `user_id` to
+      another) the extra slot is blanked and disabled.  Each duplicate is
+      reported as its own generated `ipmi_user` resource with
+      `ensure => absent`, applied before this resource, so it honours
+      `--noop` and is idempotent.
+
+      Slots managed by other resources in the catalog, and the anonymous
+      slot 1, are never purged.
     DESC
-    newvalues(:true, :false)
-    defaultto :false
-
-    def insync?(is)
-      return true if should == :false
-
-      is == :true
-    end
+    defaultto false
   end
 
   # Validate the resource parameters
@@ -213,6 +207,30 @@ Puppet::Type.newtype(:ipmi_user) do
     real_pw = pw.is_a?(Puppet::Pops::Types::PSensitiveType::Sensitive) ? pw.unwrap : pw
     raise Puppet::Error, "You must supply a password to enable #{self[:username]} with ipmi_user" if real_pw.nil? || (real_pw.respond_to?(:empty?) && real_pw.empty?)
     raise Puppet::Error, 'IPMI v2 restricts passwords to 20 or fewer characters' if real_pw.length > 20
+  end
+
+  # Purge duplicates before this resource runs: some BMCs refuse to give a
+  # name to a slot while another slot still holds it.
+  def depthfirst?
+    true
+  end
+
+  # Emit one `ensure => absent` resource per duplicate slot.
+  def generate
+    return [] unless self[:purge_duplicates] && self[:ensure] == :present
+
+    peers = [self]
+    peers = catalog.resources.select { |r| r.is_a?(self.class) && r[:channel] == self[:channel] } if catalog
+    provider.class.stray_slots(self, peers).map do |entry|
+      self.class.new(
+        name: "#{self[:name]} (duplicate in slot #{entry[:id]})",
+        ensure: :absent,
+        username: self[:username],
+        user_id: entry[:id],
+        channel: self[:channel],
+        provider: self[:provider],
+      )
+    end
   end
 
   # Reject catalogs where two live resources claim the same username or the

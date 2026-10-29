@@ -56,6 +56,19 @@ module Puppet::Provider::Ipmi::UserLogic
     table.find { |u| u[:id] == requested_id && u[:name] == username }
   end
 
+  # Find slots that hold a username but are not the slot any resource in the
+  # catalog manages.  Slot 1 (anonymous) is never reported.
+  #
+  # @param table [Array<Hash>] BMC user table
+  # @param username [String]
+  # @param claimed_ids [Array<Integer>] slots assigned to catalog resources
+  # @return [Array<Hash>]
+  def self.stray_slots(table, username, claimed_ids)
+    table.select do |u|
+      u[:id] != 1 && u[:name] == username && !claimed_ids.include?(u[:id])
+    end
+  end
+
   # Translate a table entry to the property hash a provider instance carries.
   #
   # @param entry [Hash, nil] table entry, nil when the user does not exist
@@ -81,6 +94,22 @@ module Puppet::Provider::Ipmi::UserLogic
       read_users(channel).reject { |u| Puppet::Provider::Ipmi::UserLogic.free_name?(u[:name]) }.map do |entry|
         new(Puppet::Provider::Ipmi::UserLogic.property_hash_for(entry, channel).merge(name: entry[:name]))
       end
+    end
+
+    # Slots that duplicate a resource's username outside the slots the
+    # catalog manages.  Used by the type's `generate` to purge them.
+    #
+    # @param resource [Puppet::Type, Hash]
+    # @param peers [Array<Puppet::Type>] every ipmi_user on the same channel,
+    #   including the resource itself
+    # @return [Array<Hash>] table entries to purge
+    def stray_slots(resource, peers)
+      table = read_users(resource[:channel])
+      results = Puppet::Provider::Ipmi::UserAllocator.allocate(table, peers.map { |r| allocation_request(r) })
+      return [] if results.fetch(resource[:name]).key?(:error)
+
+      claimed = results.values.filter_map { |r| r[:id] }
+      Puppet::Provider::Ipmi::UserLogic.stray_slots(table, resource[:username] || resource[:name], claimed)
     end
 
     # Describe a resource to the allocator.
@@ -203,7 +232,6 @@ module Puppet::Provider::Ipmi::UserLogic
     else
       enable_user!
     end
-    purge_mismatched_ids! if @resource[:purge_id_mismatch] == :true
   end
 
   # IPMI cannot delete a slot.  Absent means: named DISABLED_<id> with no
@@ -288,22 +316,6 @@ module Puppet::Provider::Ipmi::UserLogic
     refresh_slots!
   end
 
-  # @return [Symbol] :true if no mismatched slot exists or purge is disabled,
-  #   :false otherwise
-  def purge_id_mismatch
-    return :true unless @resource[:purge_id_mismatch] == :true
-
-    return :false if mismatched_slot_exists?
-
-    :true
-  end
-
-  # @param _val [Symbol] ignored; purge is driven by the getter
-  # @return [void]
-  def purge_id_mismatch=(_val)
-    purge_mismatched_ids!
-  end
-
   private
 
   # Refuse to modify password or privilege unless the resolved slot is owned
@@ -317,35 +329,6 @@ module Puppet::Provider::Ipmi::UserLogic
     return if actual == user_name
 
     raise Puppet::Error, "Refusing to modify slot #{resolved_user_id}: expected user '#{user_name}' but slot contains #{actual.inspect}"
-  end
-
-  # @return [Array<Hash>] live slots other than the resolved one that hold
-  #   the target username
-  def mismatched_slots
-    slots.select do |entry|
-      entry[:id] != resolved_user_id &&
-        entry[:name] == user_name &&
-        !entry[:name].start_with?('DISABLED_')
-    end
-  end
-
-  # @return [Boolean] true if another slot holds the target username
-  def mismatched_slot_exists?
-    !mismatched_slots.empty?
-  end
-
-  # Blank and disable any slot (other than resolved_user_id) that holds the
-  # target username.
-  #
-  # @return [void]
-  def purge_mismatched_ids!
-    mismatched_slots.each do |entry|
-      slot = entry[:id]
-      Puppet.debug("ipmi_user: purging #{user_name} from slot #{slot} (expected at #{resolved_user_id})")
-      self.class.write_name(channel, slot, Puppet::Provider::Ipmi::UserLogic.disabled_name(slot))
-      self.class.write_access(channel, slot, false, NO_ACCESS_PRIV)
-    end
-    refresh_slots!
   end
 
   # Enable the resolved slot with the configured username, password,

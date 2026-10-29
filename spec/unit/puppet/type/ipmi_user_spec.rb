@@ -7,13 +7,13 @@ require 'fileutils'
 
 describe Puppet::Type.type(:ipmi_user) do
   describe 'when validating attributes' do
-    %i[name username user_id channel].each do |param|
+    %i[name username user_id channel purge_duplicates].each do |param|
       it "has a #{param} parameter" do
         expect(described_class.attrtype(param)).to eq(:param)
       end
     end
 
-    %i[ensure password enable priv purge_id_mismatch].each do |prop|
+    %i[ensure password enable priv].each do |prop|
       it "has a #{prop} property" do
         expect(described_class.attrtype(prop)).to eq(:property)
       end
@@ -144,11 +144,6 @@ describe Puppet::Type.type(:ipmi_user) do
       expect(resource.property(:enable).insync?(:false)).to be(false)
     end
 
-    it 'purges mismatched slots when enable is false' do
-      resource = described_class.new(name: 'test', enable: :false, purge_id_mismatch: :true)
-      expect(resource.property(:purge_id_mismatch).insync?(:false)).to be(false)
-    end
-
     it 'rejects invalid user_id' do
       expect do
         described_class.new(name: 'test', enable: :false, user_id: 0)
@@ -169,6 +164,52 @@ describe Puppet::Type.type(:ipmi_user) do
       expect do
         described_class.new(name: 'test', enable: :false, user_id: 'foo')
       end.to raise_error(Puppet::Error, %r{user_id must be a positive integer or "auto"})
+    end
+  end
+
+  describe '#generate' do
+    let(:strays) { [{ id: 2, name: 'bob' }, { id: 5, name: 'bob' }] }
+
+    def build(**params)
+      described_class.new({ name: 'bob', password: 'secret', channel: 1, user_id: 3 }.merge(params))
+    end
+
+    it 'does not purge by default' do
+      expect(build.generate).to eq([])
+    end
+
+    it 'generates one absent resource per stray slot' do
+      resource = build(purge_duplicates: true)
+      resource.provider.class.expects(:stray_slots).returns(strays)
+
+      generated = resource.generate
+
+      expect(generated.map { |r| r[:user_id] }).to eq([2, 5])
+      expect(generated.map { |r| r[:ensure] }).to all(eq(:absent))
+      expect(generated.map { |r| r[:username] }).to all(eq('bob'))
+      expect(generated.map(&:title)).to eq(['bob (duplicate in slot 2)', 'bob (duplicate in slot 5)'])
+    end
+
+    it 'does not purge for an absent resource' do
+      resource = build(purge_duplicates: true, ensure: :absent)
+      resource.provider.class.expects(:stray_slots).never
+
+      expect(resource.generate).to eq([])
+    end
+
+    it 'passes every ipmi_user on the channel as peers' do
+      resource = build(purge_duplicates: true)
+      other = build(name: 'amy', user_id: 4)
+      elsewhere = build(name: 'zed', user_id: 4, channel: 2)
+      catalog = Puppet::Resource::Catalog.new
+      [resource, other, elsewhere].each { |r| catalog.add_resource(r) }
+      resource.provider.class.expects(:stray_slots).with(resource, [resource, other]).returns([])
+
+      resource.generate
+    end
+
+    it 'runs before the resource that generated it' do
+      expect(build).to be_depthfirst
     end
   end
 
