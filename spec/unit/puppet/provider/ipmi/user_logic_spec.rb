@@ -89,12 +89,28 @@ describe Puppet::Provider::Ipmi::UserLogic do
       expect(provider.resolved_user_id).to be_nil
     end
 
-    it 'destroy blanks the slot and revokes access' do
+    it 'destroy revokes access first, then blanks the slot' do
       params[:user_id] = 2
       params[:username] = 'ADMIN'
       provider.destroy
 
-      expect(log).to eq([[:name, 2, 'DISABLED_2'], [:access, 2, false, 15]])
+      expect(log).to eq([[:access, 2, false, 15], [:name, 2, 'DISABLED_2']])
+    end
+
+    it 'destroy never adjusts permissions on an already disabled account' do
+      table[1].merge!(enabled: false, priv: 4)
+      params[:user_id] = 2
+      params[:username] = 'ADMIN'
+      provider.destroy
+
+      expect(log).to eq([[:name, 2, 'DISABLED_2']])
+    end
+
+    it 'destroy leaves a reserved, disabled user with no access untouched apart from the name' do
+      table[2].merge!(name: 'bob', priv: 15, enabled: false)
+      provider.destroy
+
+      expect(log).to eq([[:name, 3, 'DISABLED_3']])
     end
 
     it 'destroy leaves the slot free for reallocation' do

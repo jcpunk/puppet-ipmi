@@ -237,11 +237,20 @@ module Puppet::Provider::Ipmi::UserLogic
   # IPMI cannot delete a slot.  Absent means: named DISABLED_<id> with no
   # channel or SOL access, which the allocator treats as free.
   #
+  # Permissions cannot be adjusted on a disabled account, so access is revoked
+  # only while the account is still enabled, and always before the rename so a
+  # failure never leaves a "free" slot that still has access.
+  #
   # @return [void]
   def destroy
     id = @property_hash[:user_id]
+    entry = slots.find { |u| u[:id] == id }
+    if entry && entry[:enabled]
+      self.class.write_access(channel, id, false, NO_ACCESS_PRIV)
+    else
+      Puppet.debug("ipmi_user #{user_name}: slot #{id} is already disabled, leaving its permissions alone")
+    end
     self.class.write_name(channel, id, Puppet::Provider::Ipmi::UserLogic.disabled_name(id))
-    self.class.write_access(channel, id, false, NO_ACCESS_PRIV)
     refresh_slots!
   end
 

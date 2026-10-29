@@ -60,6 +60,22 @@ describe 'ipmi_user catalog application' do
     expect(changed_count(apply(user_id: 3, enable: :false, password: nil))).to eq(0)
   end
 
+  it 'removes a reserved, disabled user without touching its permissions' do
+    apply(user_id: 3, enable: :false, password: nil)
+    log.clear
+
+    expect(changed_count(apply(user_id: 3, ensure: :absent, password: nil))).to eq(1)
+    expect(log).to eq([[:name, 3, 'DISABLED_3']])
+  end
+
+  it 'purges a disabled duplicate without touching its permissions' do
+    apply(name: 'old', username: 'bob', user_id: 4, enable: :false, password: nil)
+    log.clear
+    apply(user_id: 3, purge_duplicates: true)
+
+    expect(log.select { |entry| entry[1] == 4 }).to eq([[:name, 4, 'DISABLED_4']])
+  end
+
   it 'removes an existing user with ensure absent and does nothing for a missing one' do
     expect(changed_count(apply(name: 'ADMIN', user_id: 2, ensure: :absent, password: nil))).to eq(1)
     expect(table.find { |u| u[:id] == 2 }).to include(name: 'DISABLED_2', enabled: false)
