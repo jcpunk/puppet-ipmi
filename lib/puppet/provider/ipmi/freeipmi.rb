@@ -11,11 +11,39 @@ class Puppet::Provider::Ipmi::Freeipmi < Puppet::Provider::Ipmi
   # @param failonfail [Boolean] whether to raise on non-zero exit
   # @param sensitive [Boolean] whether to redact the command in logs
   # @return [Puppet::Util::Execution::ProcessOutput]
-  def bmcconfig_exec(argv, failonfail: true, sensitive: false)
+  def self.bmcconfig_exec(argv, failonfail: true, sensitive: false)
     cmd = [command(:bmcconfig)] + Array(argv)
     options = { failonfail: failonfail, combine: true }
     options[:sensitive] = true if sensitive
     Puppet::Util::Execution.execute(cmd, options)
+  end
+
+  # @see Puppet::Provider::Ipmi::Freeipmi.bmcconfig_exec
+  def bmcconfig_exec(argv, failonfail: true, sensitive: false)
+    self.class.bmcconfig_exec(argv, failonfail: failonfail, sensitive: sensitive)
+  end
+
+  # Build the bmc-config argv for writing one key/value pair.
+  #
+  # FreeIPMI's --key-pair parser keeps only the first whitespace-separated
+  # word of the value, so a value containing whitespace is silently truncated.
+  # The value is deliberately omitted from the error message because it may be
+  # a password or community string.
+  #
+  # @return [Array<String>]
+  def self.bmc_config_set_argv(section, key, value, channel: nil)
+    raise Puppet::Error, "#{section}:#{key}: freeipmi cannot store a value containing whitespace" if value.to_s.match?(%r{\s})
+
+    argv = ['--commit', '--key-pair', "#{section}:#{key}=#{value}"]
+    argv += ['--lan-channel-number', channel.to_s] if channel
+    argv
+  end
+
+  # Write a key/value pair to a bmc-config section.
+  #
+  # @return [void]
+  def self.bmc_config_set(section, key, value, channel: nil, sensitive: false)
+    bmcconfig_exec(bmc_config_set_argv(section, key, value, channel: channel), sensitive: sensitive)
   end
 
   # @return [Integer] IPMI channel for user management
@@ -49,17 +77,7 @@ class Puppet::Provider::Ipmi::Freeipmi < Puppet::Provider::Ipmi
   # @param channel [Integer, nil] optional LAN channel number
   # @return [void]
   def bmc_config_set(section, key, value, channel: nil, sensitive: false)
-    # FreeIPMI's --key-pair parser keeps only the first whitespace-separated
-    # word of the value, so a value containing whitespace is silently truncated.
-    # The value is deliberately omitted from the error message because it may be
-    # a password or community string.
-    if value.to_s.match?(%r{\s})
-      raise Puppet::Error, "#{section}:#{key}: freeipmi cannot store a value containing whitespace"
-    end
-
-    argv = ['--commit', '--key-pair', "#{section}:#{key}=#{value}"]
-    argv += ['--lan-channel-number', channel.to_s] if channel
-    bmcconfig_exec(argv, sensitive: sensitive)
+    bmcconfig_exec(self.class.bmc_config_set_argv(section, key, value, channel: channel), sensitive: sensitive)
   end
 
   private

@@ -38,7 +38,7 @@ class Puppet::Provider::Ipmi < Puppet::Provider
   #
   # @param output [String] command output to parse
   # @return [Hash<String, String>]
-  def parse_colon_kv(output)
+  def self.parse_colon_kv(output)
     result = {}
     return result if output.nil? || output.empty?
 
@@ -51,6 +51,11 @@ class Puppet::Provider::Ipmi < Puppet::Provider
       result[key] = value unless key.empty?
     end
     result
+  end
+
+  # @see Puppet::Provider::Ipmi.parse_colon_kv
+  def parse_colon_kv(output)
+    self.class.parse_colon_kv(output)
   end
 
   # Resolve `user_id => 'auto'` to a concrete BMC user slot.
