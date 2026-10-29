@@ -94,12 +94,4 @@ Puppet::Type.type(:ipmi_user).provide(
     bmc_config_set(section, 'Lan_Enable_Link_Auth', flag, channel: channel)
     bmc_config_set(section, 'SOL_Payload_Access', flag, channel: channel)
   end
-
-  # Reset auto-allocation state at the start of each catalog application and
-  # reserve any user IDs that other resources claim explicitly.
-  def self.prefetch(resources)
-    Puppet::Provider::Ipmi.reset_auto_allocated_user_ids!
-    explicit = resources.each_value.filter_map { |r| r[:user_id] unless r[:user_id] == :auto }
-    Puppet::Provider::Ipmi.auto_allocated_user_ids.merge(explicit)
-  end
 end

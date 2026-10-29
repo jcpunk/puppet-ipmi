@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # In-memory BMC used to exercise Puppet::Provider::Ipmi::UserLogic without a
-# real backend.  Every write is applied to `table` and recorded in `log`.
+# real backend.  Every write is applied to the table and recorded in the log.
 require 'puppet/provider/ipmi/user_logic'
 
 module FakeUserBmc
@@ -9,37 +9,74 @@ module FakeUserBmc
     entries.map { |e| { name: '', priv: Puppet::Provider::Ipmi::UserLogic::NO_ACCESS_PRIV, enabled: false }.merge(e) }
   end
 
-  # @return [Class] a provider class implementing the backend primitives
+  # Backend primitives; the including class carries its own state.
+  module Primitives
+    attr_accessor :fake_table, :fake_log, :fake_password
+
+    def read_users(_channel)
+      fake_table.map(&:dup)
+    end
+
+    def write_name(_channel, id, name)
+      fake_log << [:name, id, name]
+      fake_table.find { |u| u[:id] == id }[:name] = name
+    end
+
+    def write_password(_channel, id, password)
+      fake_log << [:password, id, password]
+    end
+
+    def password_matches?(_channel, _id, password)
+      password == fake_password
+    end
+
+    def write_priv(_channel, id, priv)
+      fake_log << [:priv, id, priv]
+      fake_table.find { |u| u[:id] == id }[:priv] = priv
+    end
+
+    def write_access(_channel, id, enabled, priv)
+      fake_log << [:access, id, enabled, priv]
+      entry = fake_table.find { |u| u[:id] == id }
+      entry[:enabled] = enabled
+      entry[:priv] = priv
+    end
+  end
+
+  module Instance
+    def channel
+      @resource[:channel]
+    end
+  end
+
+  # @return [Class] an unregistered provider class bound to the given state
   def self.provider_class(table, log, password: nil)
     Class.new(Puppet::Provider::Ipmi) do
       include Puppet::Provider::Ipmi::UserLogic
+      include FakeUserBmc::Instance
+      extend FakeUserBmc::Primitives
 
-      define_singleton_method(:read_users) { |_channel| table.map(&:dup) }
-      define_singleton_method(:write_name) do |_channel, id, name|
-        log << [:name, id, name]
-        table.find { |u| u[:id] == id }[:name] = name
-      end
-      define_singleton_method(:write_password) { |_channel, id, pw| log << [:password, id, pw] }
-      define_singleton_method(:password_matches?) { |_channel, _id, pw| pw == password }
-      define_singleton_method(:write_priv) do |_channel, id, priv|
-        log << [:priv, id, priv]
-        table.find { |u| u[:id] == id }[:priv] = priv
-      end
-      define_singleton_method(:write_access) do |_channel, id, enabled, priv|
-        log << [:access, id, enabled, priv]
-        entry = table.find { |u| u[:id] == id }
-        entry[:enabled] = enabled
-        entry[:priv] = priv
-      end
+      self.fake_table = table
+      self.fake_log = log
+      self.fake_password = password
+    end
+  end
 
-      def initialize(resource)
-        super()
-        @resource = resource
-      end
+  # Register (once) an `ipmi_user` provider that is never chosen by default
+  # and return it, for specs that need to run a real catalog.
+  #
+  # @return [Class]
+  def self.registered_provider
+    type = Puppet::Type.type(:ipmi_user)
+    existing = type.provider(:fake_bmc)
+    return existing if existing
 
-      def channel
-        @resource[:channel]
-      end
+    type.provide(:fake_bmc, parent: Puppet::Provider::Ipmi) do
+      desc 'Test-only in-memory BMC'
+      confine true: false
+      include Puppet::Provider::Ipmi::UserLogic
+      include FakeUserBmc::Instance
+      extend FakeUserBmc::Primitives
     end
   end
 end

@@ -2,6 +2,7 @@
 
 require 'puppet'
 require File.join(File.dirname(__FILE__), '..', 'ipmi')
+require 'puppet/util/ipmi_lan_channel'
 
 # Backend-independent behaviour of the `ipmi_user` providers.
 #
@@ -35,6 +36,85 @@ module Puppet::Provider::Ipmi::UserLogic
   # @return [String] the placeholder name given to a purged slot
   def self.disabled_name(id)
     "DISABLED_#{id}"
+  end
+
+  # Find the slot that already belongs to a user.  Pure function of the BMC
+  # table so it can be shared by prefetch and any other caller.
+  #
+  # With an explicit id the slot must hold the username.  With `:auto` the
+  # lowest id holding the username wins; slot 1 is the anonymous slot and is
+  # never matched.
+  #
+  # @param table [Array<Hash>] BMC user table
+  # @param username [String]
+  # @param requested_id [Integer, Symbol] explicit id or :auto
+  # @return [Hash, nil]
+  def self.existing_slot(table, username, requested_id)
+    return table.find { |u| u[:id] != 1 && u[:name] == username } if requested_id == :auto
+
+    table.find { |u| u[:id] == requested_id && u[:name] == username }
+  end
+
+  # Translate a table entry to the property hash a provider instance carries.
+  #
+  # @param entry [Hash, nil] table entry, nil when the user does not exist
+  # @param channel [Integer]
+  # @return [Hash]
+  def self.property_hash_for(entry, channel)
+    return { ensure: :absent } if entry.nil?
+
+    enable = :false
+    enable = :true if entry[:enabled] && entry[:priv] != NO_ACCESS_PRIV
+
+    { ensure: :present, name: entry[:name], user_id: entry[:id], priv: entry[:priv], enable: enable, channel: channel }
+  end
+
+  # Class-level behaviour mixed into each provider class.
+  module ClassMethods
+    # Enumerate every named user slot on the default channel, so that
+    # `puppet resource ipmi_user` works.
+    #
+    # @return [Array<Puppet::Provider>]
+    def instances
+      channel = Puppet::Util::IpmiLanChannel.default_channel(nil)
+      read_users(channel).reject { |u| Puppet::Provider::Ipmi::UserLogic.free_name?(u[:name]) }.map do |entry|
+        new(Puppet::Provider::Ipmi::UserLogic.property_hash_for(entry, channel).merge(name: entry[:name]))
+      end
+    end
+
+    # Build the provider for one resource from an already-read BMC table.
+    #
+    # @param resource [Puppet::Type, Hash]
+    # @param table [Array<Hash>]
+    # @return [Puppet::Provider]
+    def provider_for(resource, table)
+      username = resource[:username] || resource[:name]
+      entry = Puppet::Provider::Ipmi::UserLogic.existing_slot(table, username, resource[:user_id])
+      provider = new(Puppet::Provider::Ipmi::UserLogic.property_hash_for(entry, resource[:channel]))
+      provider.resource = resource
+      provider.slots = table
+      provider
+    end
+
+    # Read each channel's user table once and hand every resource a provider
+    # bound to that snapshot.
+    #
+    # @param resources [Hash<String, Puppet::Type>]
+    # @return [void]
+    def prefetch(resources)
+      Puppet::Provider::Ipmi.reset_auto_allocated_user_ids!
+      explicit = resources.each_value.filter_map { |r| r[:user_id] unless r[:user_id] == :auto }
+      Puppet::Provider::Ipmi.auto_allocated_user_ids.merge(explicit)
+
+      resources.values.group_by { |r| r[:channel] }.each do |channel, group|
+        table = read_users(channel)
+        group.each { |resource| resource.provider = provider_for(resource, table) }
+      end
+    end
+  end
+
+  def self.included(base)
+    base.extend(ClassMethods)
   end
 
   # Resolve the requested user_id, expanding `auto` to a concrete BMC slot.
@@ -73,6 +153,9 @@ module Puppet::Provider::Ipmi::UserLogic
     @slots ||= self.class.read_users(channel)
   end
 
+  # @param table [Array<Hash>] snapshot read by prefetch
+  attr_writer :slots
+
   # Drop the cached user table after a write.
   #
   # @return [void]
@@ -89,18 +172,32 @@ module Puppet::Provider::Ipmi::UserLogic
   # Properties
   # ---------------------------------------------------------------------------
 
-  # @return [String, nil] current username in the resolved slot
-  def username
-    entry = slot_entry
-    return nil if entry.nil?
-
-    entry[:name]
+  # @return [Boolean] true when the BMC holds a slot for the target user
+  def exists?
+    @property_hash[:ensure] == :present
   end
 
-  # @param val [String] username to set
+  # Create (or fully converge) the user in one step.  Puppet skips the other
+  # properties on the run that changes `ensure`, so everything is applied here.
+  #
   # @return [void]
-  def username=(val)
-    self.class.write_name(channel, resolved_user_id, val.to_s)
+  def create
+    if @resource[:enable] == :false
+      disable_user!
+    else
+      enable_user!
+    end
+    purge_mismatched_ids! if @resource[:purge_id_mismatch] == :true
+  end
+
+  # IPMI cannot delete a slot.  Absent means: named DISABLED_<id> with no
+  # channel or SOL access, which the allocator treats as free.
+  #
+  # @return [void]
+  def destroy
+    id = @property_hash[:user_id]
+    self.class.write_name(channel, id, Puppet::Provider::Ipmi::UserLogic.disabled_name(id))
+    self.class.write_access(channel, id, false, NO_ACCESS_PRIV)
     refresh_slots!
   end
 
@@ -139,25 +236,17 @@ module Puppet::Provider::Ipmi::UserLogic
     refresh_slots!
   end
 
-  # @return [Symbol] :true if the slot is enabled, :false otherwise
+  # @return [Symbol] :true if the slot grants access, :false otherwise
   def enable
-    entry = slot_entry
-    return :false if entry.nil?
+    @property_hash.fetch(:enable, :false)
+  end
 
-    no_access = entry[:priv] == NO_ACCESS_PRIV
-    name_empty = entry[:name].empty?
-
-    # A disabled resource is only in sync when the slot has a name and
-    # NO ACCESS.  Otherwise run disable_user! to create the name and/or revoke
-    # access.
-    return :true if @resource[:enable] == :false && (name_empty || !no_access)
-
-    # An enabled resource needs a named slot with access.
-    return :false if name_empty || no_access
-
-    return :true if entry[:enabled]
-
-    :false
+  # A disabled resource is only converged once the slot has NO ACCESS, which
+  # is stricter than the enabled flag alone.
+  #
+  # @return [Boolean]
+  def access_revoked?
+    @property_hash[:priv] == NO_ACCESS_PRIV
   end
 
   # @param val [Symbol] :true to enable, :false to disable
@@ -172,10 +261,7 @@ module Puppet::Provider::Ipmi::UserLogic
 
   # @return [Integer, nil] numeric privilege level of the slot
   def priv
-    entry = slot_entry
-    return nil if entry.nil?
-
-    entry[:priv]
+    @property_hash[:priv]
   end
 
   # @param val [Integer] privilege level to set
@@ -209,7 +295,9 @@ module Puppet::Provider::Ipmi::UserLogic
   # rejected a duplicate name), this prevents the wrong slot from receiving
   # this resource's password or privilege.
   def assert_slot_owned!
-    actual = username
+    entry = slot_entry
+    actual = nil
+    actual = entry[:name] unless entry.nil?
     return if actual == user_name
 
     raise Puppet::Error, "Refusing to modify slot #{resolved_user_id}: expected user '#{user_name}' but slot contains #{actual.inspect}"
@@ -266,7 +354,9 @@ module Puppet::Provider::Ipmi::UserLogic
   # @return [void]
   def disable_user!
     id = resolved_user_id
-    current = username
+    entry = slot_entry
+    current = nil
+    current = entry[:name] unless entry.nil?
     Puppet.debug("ipmi_user disable slot #{id}: current_name=#{current.inspect}, desired_name=#{user_name.inspect}")
     self.class.write_name(channel, id, user_name.to_s) if current.to_s.strip.empty? && !user_name.to_s.strip.empty?
 

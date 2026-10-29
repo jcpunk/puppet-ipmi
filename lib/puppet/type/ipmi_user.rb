@@ -53,6 +53,18 @@ Puppet::Type.newtype(:ipmi_user) do
       }
   DOC
 
+  ensurable do
+    desc <<-DESC
+      Whether the user exists.  IPMI cannot delete a user slot, so `absent`
+      renames the slot to `DISABLED_<id>` and removes all channel and SOL
+      access; the slot is then treated as free.
+    DESC
+    defaultto :present
+
+    newvalue(:present) { provider.create }
+    newvalue(:absent) { provider.destroy }
+  end
+
   newparam(:name, namevar: true) do
     desc 'Resource title.  Used as the IPMI username when `username` is not set.'
   end
@@ -99,8 +111,8 @@ Puppet::Type.newtype(:ipmi_user) do
     munge(&:to_i)
   end
 
-  newproperty(:username) do
-    desc 'The IPMI username to set.  Defaults to the resource title.'
+  newparam(:username) do
+    desc 'The IPMI username.  Defaults to the resource title.'
     defaultto do
       @resource[:name]
     end
@@ -109,16 +121,6 @@ Puppet::Type.newtype(:ipmi_user) do
       raise Puppet::Error, 'username must be a non-empty string' if str.empty?
       raise Puppet::Error, 'username must be 16 characters or fewer' if str.length > 16
       raise Puppet::Error, 'username must not contain whitespace' if str =~ %r{\s}
-    end
-
-    def insync?(is)
-      # When disabling a slot we do not want to rename an existing user;
-      # we only remove privileges and access.  This matches the behavior of
-      # the 8.0.0 wrapper define.  An empty slot is named by the disable
-      # path so the requested username is still reserved.
-      return true if @resource[:enable] == :false
-
-      super
     end
   end
 
@@ -158,6 +160,14 @@ Puppet::Type.newtype(:ipmi_user) do
     desc 'Whether this user account should be enabled or disabled.'
     newvalues(:true, :false)
     defaultto :true
+
+    # Disabling is only complete once the slot has NO ACCESS, which the
+    # enabled flag alone does not tell us.
+    def insync?(is)
+      return provider.access_revoked? if should == :false
+
+      super
+    end
   end
 
   # Design note: this is deliberately a property, not a param.  The decision
@@ -191,7 +201,7 @@ Puppet::Type.newtype(:ipmi_user) do
     priv = self[:priv]
     raise Puppet::Error, "priv must be 1 (CALLBACK), 2 (USER), 3 (OPERATOR), or 4 (ADMINISTRATOR), got #{priv}" unless [1, 2, 3, 4].include?(priv)
 
-    return unless self[:enable] == :true
+    return unless self[:ensure] == :present && self[:enable] == :true
 
     pw = self[:password]
     # Unwrap Sensitive first so emptiness is checked on the real value;

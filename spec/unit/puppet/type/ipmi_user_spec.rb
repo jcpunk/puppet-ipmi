@@ -7,13 +7,13 @@ require 'fileutils'
 
 describe Puppet::Type.type(:ipmi_user) do
   describe 'when validating attributes' do
-    %i[name user_id channel].each do |param|
+    %i[name username user_id channel].each do |param|
       it "has a #{param} parameter" do
         expect(described_class.attrtype(param)).to eq(:param)
       end
     end
 
-    %i[username password enable priv purge_id_mismatch].each do |prop|
+    %i[ensure password enable priv purge_id_mismatch].each do |prop|
       it "has a #{prop} property" do
         expect(described_class.attrtype(prop)).to eq(:property)
       end
@@ -119,9 +119,29 @@ describe Puppet::Type.type(:ipmi_user) do
       expect(resource.property(:priv).insync?(4)).to be(true)
     end
 
-    it 'ignores username mismatch when enable is false' do
-      resource = described_class.new(name: 'test', enable: :false, username: 'root')
-      expect(resource.property(:username).insync?('admin')).to be(true)
+    it 'defaults ensure to present' do
+      resource = described_class.new(name: 'test', enable: :false)
+      expect(resource[:ensure]).to eq(:present)
+    end
+
+    it 'does not require a password when ensure is absent' do
+      expect { described_class.new(name: 'test', ensure: :absent) }.not_to raise_error
+    end
+
+    it 'treats a disabled user as in sync only once access is revoked' do
+      resource = described_class.new(name: 'test', enable: :false)
+      provider = resource.provider
+      provider.stubs(:access_revoked?).returns(false, true)
+
+      expect(resource.property(:enable).insync?(:false)).to be(false)
+      expect(resource.property(:enable).insync?(:false)).to be(true)
+    end
+
+    it 'compares the enabled flag when enabling' do
+      resource = described_class.new(name: 'test', password: 'secret')
+
+      expect(resource.property(:enable).insync?(:true)).to be(true)
+      expect(resource.property(:enable).insync?(:false)).to be(false)
     end
 
     it 'purges mismatched slots when enable is false' do
@@ -178,12 +198,9 @@ describe Puppet::Type.type(:ipmi_user) do
       catalog.add_resource(resource)
 
       resource.provider.class.stubs(:suitable?).returns(true)
-      resource.provider.stubs(:username).returns('NEWUSER')
-      resource.provider.stubs(:priv).returns(4)
-      resource.provider.stubs(:enable).returns(:true)
+      resource.provider.class.stubs(:read_users).returns([{ id: 4, name: 'NEWUSER', priv: 4, enabled: true }])
       resource.provider.stubs(:password_insync?).returns(false)
       resource.provider.stubs(:password=)
-      resource.provider.stubs(:purge_id_mismatch).returns(:true)
 
       transaction = catalog.apply
 
