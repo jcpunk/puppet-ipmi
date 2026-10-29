@@ -176,13 +176,10 @@ When upgrading from 8.x or earlier:
 - `ipmi::default_channel` applies only to resources declared through the
   `ipmi` class.
 - The `ipmi_user`'s username now defaults to the `namevar` rather than `root`.
-- `ipmi_user` is ensurable (default `present`).  `username` is now a
-  parameter, not a property.
-- `ipmi_user`'s `purge_id_mismatch` property is replaced by the
-  `purge_duplicates` parameter (see below).
-- `user_id => 'auto'` is now allocated deterministically for the whole
-  catalog (see below).  A catalog that declares the same username twice, or
-  the same explicit `user_id` twice, on one channel is rejected.
+- `purge_id_mismatch` is now `ipmi_user`'s `purge_duplicates` (see below).
+  It also applies to disabled users.
+- A catalog that declares the same username, or the same explicit `user_id`,
+  twice on one channel is rejected.
 
 #### `ipmi_user`
 
