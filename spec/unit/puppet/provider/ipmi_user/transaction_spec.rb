@@ -15,7 +15,6 @@ describe 'ipmi_user catalog application' do
 
   before do
     Puppet[:statedir] = state_dir
-    Puppet::Provider::Ipmi.reset_auto_allocated_user_ids!
     provider.stubs(:suitable?).returns(true)
     provider.fake_table = table
     provider.fake_log = log
@@ -25,9 +24,14 @@ describe 'ipmi_user catalog application' do
   after { FileUtils.rm_rf(state_dir) }
 
   def apply(**params)
-    resource = type.new({ name: 'bob', password: 'secret', channel: 1, provider: 'fake_bmc' }.merge(params).compact)
+    apply_all(params)
+  end
+
+  def apply_all(*param_sets)
     catalog = Puppet::Resource::Catalog.new
-    catalog.add_resource(resource)
+    param_sets.each do |params|
+      catalog.add_resource(type.new({ name: 'bob', password: 'secret', channel: 1, provider: 'fake_bmc' }.merge(params).compact))
+    end
     catalog.apply.report
   end
 
@@ -62,5 +66,32 @@ describe 'ipmi_user catalog application' do
 
     expect(changed_count(apply(name: 'ADMIN', user_id: 2, ensure: :absent, password: nil))).to eq(0)
     expect(changed_count(apply(name: 'ghost', ensure: :absent, password: nil))).to eq(0)
+  end
+
+  it 'gives the same slots to several auto resources regardless of catalog order' do
+    sets = [{ name: 'zed' }, { name: 'amy' }, { name: 'bob' }]
+    apply_all(*sets)
+    first = table.map { |u| u[:name] }
+
+    table.each { |u| u.merge!(name: '', priv: 15, enabled: false) unless u[:id] == 2 }
+    apply_all(*sets.reverse)
+
+    expect(table.map { |u| u[:name] }).to eq(first)
+    expect(first).to eq(['', 'ADMIN', 'amy', 'bob'])
+  end
+
+  it 'stays quiet on repeated runs with several auto resources' do
+    sets = [{ name: 'amy' }, { name: 'bob' }]
+    apply_all(*sets)
+
+    expect(changed_count(apply_all(*sets))).to eq(0)
+  end
+
+  it 'reports a failure for the resource without a slot and still applies the others' do
+    sets = %w[a b c].map { |n| { name: n } }
+    report = apply_all(*sets)
+
+    expect(table.map { |u| u[:name] }).to eq(['', 'ADMIN', 'a', 'b'])
+    expect(report.resource_statuses.values.count(&:failed)).to eq(1)
   end
 end

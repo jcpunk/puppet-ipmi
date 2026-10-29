@@ -172,6 +172,45 @@ describe Puppet::Type.type(:ipmi_user) do
     end
   end
 
+  describe '#pre_run_check' do
+    def catalog_with(*param_sets)
+      catalog = Puppet::Resource::Catalog.new
+      resources = param_sets.map { |params| described_class.new({ password: 'secret', channel: 1 }.merge(params)) }
+      resources.each { |r| catalog.add_resource(r) }
+      resources
+    end
+
+    it 'rejects two live resources with the same username on one channel' do
+      first, = catalog_with({ name: 'a', username: 'bob' }, { name: 'b', username: 'bob' })
+
+      expect { first.pre_run_check }.to raise_error(Puppet::Error, %r{manage username bob on channel 1: a, b})
+    end
+
+    it 'rejects two live resources claiming the same explicit slot' do
+      first, = catalog_with({ name: 'a', user_id: 4 }, { name: 'b', user_id: 4 })
+
+      expect { first.pre_run_check }.to raise_error(Puppet::Error, %r{claim user_id 4})
+    end
+
+    it 'allows the same username on different channels' do
+      first, = catalog_with({ name: 'a', username: 'bob' }, { name: 'b', username: 'bob', channel: 2 })
+
+      expect { first.pre_run_check }.not_to raise_error
+    end
+
+    it 'allows several auto resources with different usernames' do
+      first, = catalog_with({ name: 'a' }, { name: 'b' })
+
+      expect { first.pre_run_check }.not_to raise_error
+    end
+
+    it 'exempts resources that are ensure => absent' do
+      first, = catalog_with({ name: 'a', username: 'bob' }, { name: 'b', username: 'bob', ensure: :absent })
+
+      expect { first.pre_run_check }.not_to raise_error
+    end
+  end
+
   describe 'when handling sensitive values' do
     it 'marks the password property as sensitive' do
       resource = described_class.new(name: 'test', password: 'secret', enable: :false)

@@ -19,8 +19,6 @@ describe Puppet::Provider::Ipmi::UserLogic do
   end
   let(:provider) { provider_class.provider_for(params, provider_class.read_users(1)) }
 
-  before { Puppet::Provider::Ipmi.reset_auto_allocated_user_ids! }
-
   describe '.existing_slot' do
     it 'matches an explicit id only when the slot holds the username' do
       expect(described_class.existing_slot(table, 'ADMIN', 2)).to include(id: 2)
@@ -86,8 +84,9 @@ describe Puppet::Provider::Ipmi::UserLogic do
 
     it 'does not allocate a slot for an absent :auto user' do
       params[:user_id] = :auto
+      params[:ensure] = :absent
       expect(provider).not_to be_exists
-      expect(Puppet::Provider::Ipmi.auto_allocated_user_ids).to be_empty
+      expect(provider.resolved_user_id).to be_nil
     end
 
     it 'destroy blanks the slot and revokes access' do
@@ -316,9 +315,30 @@ describe Puppet::Provider::Ipmi::UserLogic do
       expect { provider.resolved_user_id }.to raise_error(Puppet::Error, %r{No free IPMI user slot})
     end
 
-    it 'allocates distinct ids to multiple auto resources' do
-      other = provider_class.provider_for(params.merge(name: 'amy', username: 'amy'), provider_class.read_users(1))
-      expect([provider.resolved_user_id, other.resolved_user_id].uniq.size).to eq(2)
+    it 'allocates distinct ids to multiple auto resources during prefetch' do
+      holder = Struct.new(:data, :provider) do
+        def [](key) = data[key]
+      end
+      bob = holder.new(params)
+      amy = holder.new(params.merge(name: 'amy', username: 'amy'))
+
+      provider_class.prefetch('bob' => bob, 'amy' => amy)
+
+      expect([amy.provider.resolved_user_id, bob.provider.resolved_user_id]).to eq([3, 4])
+    end
+
+    it 'fails only the resource that finds no free slot' do
+      holder = Struct.new(:data, :provider) do
+        def [](key) = data[key]
+      end
+      table[1][:name] = 'taken'
+      resources = %w[a b c].to_h { |n| [n, holder.new(params.merge(name: n, username: n))] }
+
+      provider_class.prefetch(resources)
+
+      expect(resources['a'].provider.resolved_user_id).to eq(3)
+      expect(resources['b'].provider.resolved_user_id).to eq(4)
+      expect { resources['c'].provider.resolved_user_id }.to raise_error(Puppet::Error, %r{No free IPMI user slot})
     end
   end
 end

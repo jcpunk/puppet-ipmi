@@ -73,10 +73,14 @@ Puppet::Type.newtype(:ipmi_user) do
     desc <<-DESC
       The numeric IPMI user slot ID, or 'auto' to let the provider select one.
 
-      When set to 'auto', the provider first checks for an existing user with
-      the requested username and reuses that ID.  Otherwise it selects the
-      lowest unused ID reported by the BMC.  ID 1 is the anonymous slot and is
-      never returned by 'auto'.
+      With 'auto' the slot is chosen from the BMC's current user table and
+      the whole catalog, so it does not depend on resource evaluation order:
+      explicit `user_id` values are reserved first, a user that already holds
+      a slot keeps it (lowest id if several), and remaining 'auto' resources
+      take the lowest free slots in title order.  A slot is free when its id
+      is 2 or more and its name is empty or `DISABLED_*`.  ID 1 is the
+      anonymous slot and is never allocated.  A resource that finds no free
+      slot fails on its own; the others still apply.
 
       On SuperMicro IPMI, user id 2 is reserved for the ADMIN username.
       On ASUS IPMI, user id 2 is reserved for the admin username.
@@ -209,5 +213,32 @@ Puppet::Type.newtype(:ipmi_user) do
     real_pw = pw.is_a?(Puppet::Pops::Types::PSensitiveType::Sensitive) ? pw.unwrap : pw
     raise Puppet::Error, "You must supply a password to enable #{self[:username]} with ipmi_user" if real_pw.nil? || (real_pw.respond_to?(:empty?) && real_pw.empty?)
     raise Puppet::Error, 'IPMI v2 restricts passwords to 20 or fewer characters' if real_pw.length > 20
+  end
+
+  # Reject catalogs where two live resources claim the same username or the
+  # same explicit slot on one channel.  Free-form titles make this easy to do
+  # by accident, and the resources would otherwise fight over the slot on
+  # every run.  Resources with `ensure => absent` are exempt.
+  def pre_run_check
+    return unless catalog
+    return if self[:ensure] == :absent
+
+    peers = catalog.resources.select do |r|
+      r.is_a?(self.class) && r.name != name && r[:ensure] != :absent && r[:channel] == self[:channel]
+    end
+
+    same_name = peers.select { |r| r[:username] == self[:username] }
+    unless same_name.empty?
+      names = ([self] + same_name).map(&:name).sort.join(', ')
+      raise Puppet::Error, "Multiple ipmi_user resources manage username #{self[:username]} on channel #{self[:channel]}: #{names}"
+    end
+
+    return if self[:user_id] == :auto
+
+    same_slot = peers.select { |r| r[:user_id] == self[:user_id] }
+    return if same_slot.empty?
+
+    names = ([self] + same_slot).map(&:name).sort.join(', ')
+    raise Puppet::Error, "Multiple ipmi_user resources claim user_id #{self[:user_id]} on channel #{self[:channel]}: #{names}"
   end
 end

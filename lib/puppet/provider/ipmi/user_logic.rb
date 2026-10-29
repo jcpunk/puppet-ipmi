@@ -3,6 +3,7 @@
 require 'puppet'
 require File.join(File.dirname(__FILE__), '..', 'ipmi')
 require 'puppet/util/ipmi_lan_channel'
+require File.join(File.dirname(__FILE__), 'user_allocator')
 
 # Backend-independent behaviour of the `ipmi_user` providers.
 #
@@ -82,33 +83,48 @@ module Puppet::Provider::Ipmi::UserLogic
       end
     end
 
+    # Describe a resource to the allocator.
+    #
+    # @param resource [Puppet::Type, Hash]
+    # @return [Hash]
+    def allocation_request(resource)
+      {
+        title: resource[:name],
+        username: resource[:username] || resource[:name],
+        user_id: resource[:user_id],
+        present: resource[:ensure] != :absent,
+      }
+    end
+
     # Build the provider for one resource from an already-read BMC table.
     #
     # @param resource [Puppet::Type, Hash]
     # @param table [Array<Hash>]
+    # @param allocation [Hash, nil] this resource's entry from
+    #   UserAllocator.allocate; computed for the resource alone when omitted
     # @return [Puppet::Provider]
-    def provider_for(resource, table)
+    def provider_for(resource, table, allocation = nil)
+      allocation ||= Puppet::Provider::Ipmi::UserAllocator.allocate(table, [allocation_request(resource)]).fetch(resource[:name])
       username = resource[:username] || resource[:name]
       entry = Puppet::Provider::Ipmi::UserLogic.existing_slot(table, username, resource[:user_id])
       provider = new(Puppet::Provider::Ipmi::UserLogic.property_hash_for(entry, resource[:channel]))
       provider.resource = resource
       provider.slots = table
+      provider.allocation = allocation
       provider
     end
 
-    # Read each channel's user table once and hand every resource a provider
-    # bound to that snapshot.
+    # Read each channel's user table once, allocate slots for every resource
+    # on that channel together, and hand each resource a provider bound to
+    # the snapshot.
     #
     # @param resources [Hash<String, Puppet::Type>]
     # @return [void]
     def prefetch(resources)
-      Puppet::Provider::Ipmi.reset_auto_allocated_user_ids!
-      explicit = resources.each_value.filter_map { |r| r[:user_id] unless r[:user_id] == :auto }
-      Puppet::Provider::Ipmi.auto_allocated_user_ids.merge(explicit)
-
       resources.values.group_by { |r| r[:channel] }.each do |channel, group|
         table = read_users(channel)
-        group.each { |resource| resource.provider = provider_for(resource, table) }
+        allocations = Puppet::Provider::Ipmi::UserAllocator.allocate(table, group.map { |r| allocation_request(r) })
+        group.each { |resource| resource.provider = provider_for(resource, table, allocations.fetch(resource[:name])) }
       end
     end
   end
@@ -117,18 +133,18 @@ module Puppet::Provider::Ipmi::UserLogic
     base.extend(ClassMethods)
   end
 
-  # Resolve the requested user_id, expanding `auto` to a concrete BMC slot.
-  #
-  # @return [Integer]
-  def resolved_user_id
-    return @resolved_user_id if defined?(@resolved_user_id)
+  # @param value [Hash] this resource's entry from UserAllocator.allocate
+  attr_writer :allocation
 
-    requested = @resource[:user_id]
-    @resolved_user_id = if requested == :auto
-                          resolve_auto_user_id(user_name, slots)
-                        else
-                          requested
-                        end
+  # The slot this resource manages.  Raises when the allocator found no free
+  # slot, so only the affected resource fails.
+  #
+  # @return [Integer, nil] nil only for an absent user that has no slot
+  def resolved_user_id
+    @allocation ||= Puppet::Provider::Ipmi::UserAllocator.allocate(slots, [self.class.allocation_request(@resource)]).fetch(@resource[:name])
+    raise Puppet::Error, @allocation[:error] if @allocation.key?(:error)
+
+    @allocation[:id]
   end
 
   # @return [String] target username from the resource
